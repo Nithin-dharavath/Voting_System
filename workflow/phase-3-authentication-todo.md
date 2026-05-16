@@ -4,8 +4,6 @@
 Create login and registration system for students and admins.
 
 ## To Do
-- Create `users` table.
-- Add user fields.
 - Create student register page `/register`.
 - Create student login page `/login`.
 - Create admin login page `/admin/login`.
