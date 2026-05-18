@@ -1,13 +1,15 @@
 import mysql.connector
 import os
+from dotenv import load_dotenv
 from contextlib import contextmanager
 
-# Database configuration from environment variables
+load_dotenv()
+
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "3306")
 DB_NAME = os.getenv("DB_NAME", "voting_system")
 DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 def get_connection():
     return mysql.connector.connect(
@@ -22,12 +24,15 @@ def get_connection():
 def get_db_cursor():
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
+
     try:
         yield cursor
         conn.commit()
+
     except Exception as e:
         conn.rollback()
         raise e
+
     finally:
         cursor.close()
         conn.close()

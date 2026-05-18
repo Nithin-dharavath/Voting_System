@@ -1,4 +1,3 @@
 venv
 _pycache__
-.env
-database/__pycache__
+.env/
