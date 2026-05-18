@@ -1,6 +1,6 @@
 venv
 _pycache__
 .env/
-.codex/
+.codex
 voting.db
 
