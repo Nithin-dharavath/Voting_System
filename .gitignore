@@ -1,6 +1,6 @@
-venv
-_pycache__
-.env/
-.codex
-voting.db
-
+__pycache__/
+*.pyc
+*.pyo
+*.db
+venv/
+.env
