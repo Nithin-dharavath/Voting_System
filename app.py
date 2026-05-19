@@ -9,6 +9,15 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from starlette.middleware.base import BaseHTTPMiddleware
+import re
+
+def validate_email(email: str) -> bool:
+    pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    return bool(re.match(pattern, email))
+
+def validate_password(password: str) -> bool:
+    return len(password) >= 8
+
 
 app = FastAPI()
 
@@ -52,41 +61,51 @@ def decode_access_token(token: str):
 
 async def get_current_user(request: Request):
     token = request.cookies.get(COOKIE_NAME)
+    print(f"DEBUG: get_current_user token: {token}")
     if not token:
         return None
 
     payload = decode_access_token(token)
+    print(f"DEBUG: get_current_user payload: {payload}")
     if not payload:
         return None
 
     return payload
 
+@app.get("/debug-role")
+async def debug_role(request: Request):
+    return {"role": request.state.user.get('role') if request.state.user else "None"}
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse(
-        request=request,
-        name="register.html"
+        request,
+        "register.html",
+        {"request": request}
     )
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
     return templates.TemplateResponse(
-        request=request,
-        name="register.html"
+        request,
+        "register.html",
+        {"request": request}
     )
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse(
-        request=request,
-        name="login.html"
+        request,
+        "login.html",
+        {"request": request}
     )
 
 @app.get("/admin/login", response_class=HTMLResponse)
 async def admin_login_page(request: Request):
     return templates.TemplateResponse(
-        request=request,
-        name="admin-login.html"
+        request,
+        "admin-login.html",
+        {"request": request}
     )
 
 @app.post("/auth/register")
@@ -101,14 +120,27 @@ async def register_user(
     try:
         hashed_password = generate_password_hash(password)
 
+        # Validate email and password
+        if not validate_email(email):
+            return templates.TemplateResponse(
+                request,
+                "register.html",
+                {"request": request, "error": "Invalid email format."}
+            )
+        if not validate_password(password):
+            return templates.TemplateResponse(
+                request,
+                "register.html",
+                {"request": request, "error": "Password must be at least 8 characters long."}
+            )
+
         with get_db_cursor() as cursor:
-            # Check if email already exists
             cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
             if cursor.fetchone():
                 return templates.TemplateResponse(
-                    request=request,
-                    name="register.html",
-                    context={"error": "Email already registered."}
+                    request,
+                    "register.html",
+                    {"request": request, "error": "Email already registered."}
                 )
 
             # Insert new user
@@ -119,16 +151,15 @@ async def register_user(
             cursor.execute(query, (full_name, email, hashed_password, department, academic_year))
 
         return templates.TemplateResponse(
-            request=request,
-            name="register.html",
-            context={"success": "Registration successful! You can now login."}
+            request,
+            "register.html",
+            {"request": request, "success": "Registration successful! You can now login."}
         )
 
     except Exception as e:
         return templates.TemplateResponse(
-            request=request,
-            name="register.html",
-            context={"error": f"An error occurred: {str(e)}"}
+            "register.html",
+            {"request": request, "error": f"An error occurred: {str(e)}"}
         )
 
 @app.post("/auth/login")
@@ -139,6 +170,12 @@ async def login_user(
     password: str = Form(...)
 ):
     try:
+        if not validate_email(email):
+            return templates.TemplateResponse(
+                "login.html",
+                {"request": request, "error": "Invalid email format."}
+            )
+
         with get_db_cursor() as cursor:
             cursor.execute("SELECT id, email, password_hash, role FROM users WHERE email = %s", (email,))
             user = cursor.fetchone()
@@ -148,9 +185,8 @@ async def login_user(
             # For simplicity, we check the requested URL or use a default.
             # If it's an admin login, we might want to redirect back to /admin/login
             return templates.TemplateResponse(
-                request=request,
-                name="login.html" if "/admin/" not in str(request.url) else "admin-login.html",
-                context={"error": "Invalid email or password."}
+                "login.html" if "/admin/" not in str(request.url) else "admin-login.html",
+                {"request": request, "error": "Invalid email or password."}
             )
 
         token = create_access_token({"user_id": user['id'], "role": user['role'], "email": user['email']})
@@ -169,9 +205,60 @@ async def login_user(
 
     except Exception as e:
         return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context={"error": f"An error occurred: {str(e)}"}
+            request,
+            "login.html",
+            {"request": request, "error": f"An error occurred: {str(e)}"}
+        )
+
+@app.post("/auth/admin-login")
+async def admin_login_user(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...)
+):
+    try:
+        if not validate_email(email):
+            return templates.TemplateResponse(
+                "admin-login.html",
+                {"request": request, "error": "Invalid email format."}
+            )
+
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT id, email, password_hash, role FROM users WHERE email = %s", (email,))
+            user = cursor.fetchone()
+
+        print(f"DEBUG: User found: {user}")
+        if not user or not check_password_hash(user['password_hash'], password):
+            print("DEBUG: Password verification failed")
+            return templates.TemplateResponse(
+                "admin-login.html",
+                {"request": request, "error": "Invalid email or password."}
+            )
+
+        print(f"DEBUG: Role check: {user['role']} -> {user['role'].upper()}")
+        if user['role'].upper() != "ADMIN":
+            print("DEBUG: Role is not ADMIN")
+            return templates.TemplateResponse(
+                "admin-login.html",
+                {"request": request, "error": "Administrator access required."}
+            )
+
+        token = create_access_token({"user_id": user['id'], "role": user['role'], "email": user['email']})
+
+        response = RedirectResponse(url="/admin/dashboard")
+        response.set_cookie(
+            key=COOKIE_NAME,
+            value=token,
+            httponly=True,
+            samesite="lax",
+            secure=False
+        )
+        return response
+
+    except Exception as e:
+        return templates.TemplateResponse(
+            "admin-login.html",
+            {"request": request, "error": f"An error occurred: {str(e)}"}
         )
 
 @app.get("/auth/logout")
@@ -182,7 +269,7 @@ async def logout_user(response: Response):
 
 @app.get("/student/dashboard", response_class=HTMLResponse)
 async def student_dashboard(request: Request, user = Depends(get_current_user)):
-    if not user or user['role'] != 'STUDENT':
+    if not user or user['role'].upper() != 'STUDENT':
         return RedirectResponse(url="/login")
     return templates.TemplateResponse(
         request=request,
@@ -192,7 +279,7 @@ async def student_dashboard(request: Request, user = Depends(get_current_user)):
 
 @app.get("/admin/dashboard", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, user = Depends(get_current_user)):
-    if not user or user['role'] != 'ADMIN':
+    if not user or user['role'].upper() != 'ADMIN':
         return RedirectResponse(url="/admin/login")
     return templates.TemplateResponse(
         request=request,

@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Web search"
+      "Web search",
+      "Bash(pkill uvicorn *)",
+      "Bash(uvicorn app:app --port 8000)",
+      "Bash(curl -X POST -d \"email=admin-test@voting.com&password=admin123\" \"http://127.0.0.1:8000/auth/admin-login\" -v)",
+      "Bash(pytest *)",
+      "Bash(python3 *)",
+      "Bash(python *)"
     ]
   }
 }
