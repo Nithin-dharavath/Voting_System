@@ -85,7 +85,9 @@ async def home(request: Request):
     )
 
 @app.get("/register", response_class=HTMLResponse)
-async def register_page(request: Request):
+async def register_page(request: Request, user = Depends(get_current_user)):
+    if user:
+        return RedirectResponse(url="/admin/dashboard" if user['role'] == "ADMIN" else "/student/dashboard")
     return templates.TemplateResponse(
         request,
         "register.html",
@@ -93,7 +95,9 @@ async def register_page(request: Request):
     )
 
 @app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
+async def login_page(request: Request, user = Depends(get_current_user)):
+    if user:
+        return RedirectResponse(url="/admin/dashboard" if user['role'] == "ADMIN" else "/student/dashboard")
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -195,7 +199,7 @@ async def login_user(
         token = create_access_token({"user_id": user['id'], "role": user['role'], "email": user['email']})
 
         response = RedirectResponse(
-            url="/admin/dashboard" if user['role'] == "ADMIN" else "/student/dashboard"
+            url=("/admin/dashboard?login=success" if user['role'] == "ADMIN" else "/student/dashboard?login=success")
         )
         response.set_cookie(
             key=COOKIE_NAME,
@@ -251,7 +255,7 @@ async def admin_login_user(
 
         token = create_access_token({"user_id": user['id'], "role": user['role'], "email": user['email']})
 
-        response = RedirectResponse(url="/admin/dashboard")
+        response = RedirectResponse(url="/admin/dashboard?login=success")
         response.set_cookie(
             key=COOKIE_NAME,
             value=token,
