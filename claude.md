@@ -78,7 +78,7 @@ Admin:
 ## API Routes
 
 ```text
-Auth: POST /auth/register, POST /auth/login, GET /auth/me
+Auth: POST /auth/register, POST /auth/login, POST /auth/admin-login, GET /auth/me
 Users: GET /users/me
 Elections: POST /elections, GET /elections, GET /elections/{id}, PUT /elections/{id}, DELETE /elections/{id}
 Candidates: POST /candidates/apply, GET /candidates/my-applications, GET /candidates/election/{election_id}, GET /candidates/election/{election_id}/approved
