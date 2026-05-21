@@ -158,6 +158,7 @@ async def register_user(
 
     except Exception as e:
         return templates.TemplateResponse(
+            request,
             "register.html",
             {"request": request, "error": f"An error occurred: {str(e)}"}
         )
@@ -172,6 +173,7 @@ async def login_user(
     try:
         if not validate_email(email):
             return templates.TemplateResponse(
+                request,
                 "login.html",
                 {"request": request, "error": "Invalid email format."}
             )
@@ -185,6 +187,7 @@ async def login_user(
             # For simplicity, we check the requested URL or use a default.
             # If it's an admin login, we might want to redirect back to /admin/login
             return templates.TemplateResponse(
+                request,
                 "login.html" if "/admin/" not in str(request.url) else "admin-login.html",
                 {"request": request, "error": "Invalid email or password."}
             )
@@ -219,6 +222,7 @@ async def admin_login_user(
     try:
         if not validate_email(email):
             return templates.TemplateResponse(
+                request,
                 "admin-login.html",
                 {"request": request, "error": "Invalid email format."}
             )
@@ -231,6 +235,7 @@ async def admin_login_user(
         if not user or not check_password_hash(user['password_hash'], password):
             print("DEBUG: Password verification failed")
             return templates.TemplateResponse(
+                request,
                 "admin-login.html",
                 {"request": request, "error": "Invalid email or password."}
             )
@@ -239,6 +244,7 @@ async def admin_login_user(
         if user['role'].upper() != "ADMIN":
             print("DEBUG: Role is not ADMIN")
             return templates.TemplateResponse(
+                request,
                 "admin-login.html",
                 {"request": request, "error": "Administrator access required."}
             )
@@ -257,6 +263,7 @@ async def admin_login_user(
 
     except Exception as e:
         return templates.TemplateResponse(
+            request,
             "admin-login.html",
             {"request": request, "error": f"An error occurred: {str(e)}"}
         )
