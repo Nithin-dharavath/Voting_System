@@ -3,31 +3,33 @@
 {% block title %}Student Dashboard - Online Voting System{% endblock %}
 
 {% block content %}
-    <div class="dashboard-header">
-        <h1>Student Dashboard</h1>
-        <p>Welcome back, {{ request.state.user.email }}!</p>
-    </div>
+    <div class="page-card">
+        <div class="dashboard-header">
+            <h1>Student Dashboard</h1>
+            <p>Welcome back, {{ request.state.user.email }}!</p>
+        </div>
 
-    <div class="dashboard-grid">
-        <div class="stat-card">
-            <h3>Active Elections</h3>
-            <div class="value">2</div>
-            <p style="font-size: 0.75rem; color: #64748b;">You can participate in these</p>
+        <div class="dashboard-grid">
+            <div class="stat-card">
+                <h3>Active Elections</h3>
+                <div class="value">2</div>
+                <p style="font-size: 0.75rem; color: #64748b;">You can participate in these</p>
+            </div>
+            <div class="stat-card">
+                <h3>Candidacy</h3>
+                <div class="value">Pending</div>
+                <p style="font-size: 0.75rem; color: #64748b;">Your application status</p>
+            </div>
+            <div class="stat-card">
+                <h3>Votes Cast</h3>
+                <div class="value">1</div>
+                <p style="font-size: 0.75rem; color: #64748b;">Completed voting sessions</p>
+            </div>
         </div>
-        <div class="stat-card">
-            <h3>Candidacy</h3>
-            <div class="value">Pending</div>
-            <p style="font-size: 0.75rem; color: #64748b;">Your application status</p>
-        </div>
-        <div class="stat-card">
-            <h3>Votes Cast</h3>
-            <div class="value">1</div>
-            <p style="font-size: 0.75rem; color: #64748b;">Completed voting sessions</p>
-        </div>
-    </div>
 
-    <div class="action-group">
-        <a href="/student/elections" class="btn-primary">View Elections</a>
-        <a href="/student/elections/apply" class="btn-secondary">Apply as Candidate</a>
+        <div class="action-group">
+            <a href="/student/elections" class="btn-primary">View Elections</a>
+            <a href="/student/elections/apply" class="btn-secondary">Apply as Candidate</a>
+        </div>
     </div>
 {% endblock %}

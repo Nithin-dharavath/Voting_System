@@ -78,6 +78,9 @@ async def debug_role(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    user = request.state.user
+    if user:
+        return RedirectResponse(url="/admin/dashboard" if user['role'].upper() == "ADMIN" else "/student/dashboard")
     return templates.TemplateResponse(
         request,
         "register.html",
@@ -87,7 +90,7 @@ async def home(request: Request):
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request, user = Depends(get_current_user)):
     if user:
-        return RedirectResponse(url="/admin/dashboard" if user['role'] == "ADMIN" else "/student/dashboard")
+        return RedirectResponse(url="/admin/dashboard" if user['role'].upper() == "ADMIN" else "/student/dashboard")
     return templates.TemplateResponse(
         request,
         "register.html",
@@ -97,7 +100,7 @@ async def register_page(request: Request, user = Depends(get_current_user)):
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, user = Depends(get_current_user)):
     if user:
-        return RedirectResponse(url="/admin/dashboard" if user['role'] == "ADMIN" else "/student/dashboard")
+        return RedirectResponse(url="/admin/dashboard" if user['role'].upper() == "ADMIN" else "/student/dashboard")
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -169,7 +172,6 @@ async def register_user(
 
 @app.post("/auth/login")
 async def login_user(
-    response: Response,
     request: Request,
     email: str = Form(...),
     password: str = Form(...)
@@ -199,7 +201,8 @@ async def login_user(
         token = create_access_token({"user_id": user['id'], "role": user['role'], "email": user['email']})
 
         response = RedirectResponse(
-            url=("/admin/dashboard?login=success" if user['role'] == "ADMIN" else "/student/dashboard?login=success")
+            url=("/admin/dashboard?login=success" if user['role'].upper() == "ADMIN" else "/student/dashboard?login=success"),
+            status_code=303
         )
         response.set_cookie(
             key=COOKIE_NAME,
@@ -255,7 +258,7 @@ async def admin_login_user(
 
         token = create_access_token({"user_id": user['id'], "role": user['role'], "email": user['email']})
 
-        response = RedirectResponse(url="/admin/dashboard?login=success")
+        response = RedirectResponse(url="/admin/dashboard?login=success", status_code=303)
         response.set_cookie(
             key=COOKIE_NAME,
             value=token,
@@ -292,10 +295,37 @@ async def student_dashboard(request: Request, user = Depends(get_current_user)):
 async def admin_dashboard(request: Request, user = Depends(get_current_user)):
     if not user or user['role'].upper() != 'ADMIN':
         return RedirectResponse(url="/admin/login")
+
+    with get_db_cursor() as cursor:
+        try:
+            cursor.execute("SELECT COUNT(*) as count FROM users WHERE role = 'STUDENT'")
+            total_students = cursor.fetchone()['count']
+        except Exception:
+            total_students = 0
+
+        try:
+            cursor.execute("SELECT COUNT(*) as count FROM elections WHERE status = 'ACTIVE'")
+            active_elections = cursor.fetchone()['count']
+        except Exception:
+            active_elections = 0
+
+        try:
+            cursor.execute("SELECT COUNT(*) as count FROM candidate_applications WHERE approval_status = 'PENDING'")
+            pending_apps = cursor.fetchone()['count']
+        except Exception:
+            pending_apps = 0
+
     return templates.TemplateResponse(
         request=request,
-        name="admin_dashboard.html", # Placeholder template
-        context={"user": user}
+        name="admin_dashboard.html",
+        context={
+            "user": user,
+            "stats": {
+                "total_students": total_students,
+                "active_elections": active_elections,
+                "pending_apps": pending_apps
+            }
+        }
     )
 
 @app.get("/auth/me")
