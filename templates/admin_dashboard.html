@@ -3,70 +3,72 @@
 {% block title %}Admin Dashboard - Online Voting System{% endblock %}
 
 {% block content %}
-    <div class="dashboard-header">
-        <h1>Admin Dashboard</h1>
-        <p>System overview and management for {{ request.state.user.email }}</p>
-    </div>
+    <div class="page-card">
+        <div class="dashboard-header">
+            <h1>Admin Dashboard</h1>
+            <p>System overview and management for {{ request.state.user.email }}</p>
+        </div>
 
-    <div class="admin-layout">
-        <aside class="admin-sidebar">
-            <h3>Management</h3>
-            <ul class="sidebar-nav">
-                <li><a href="/admin/elections" class="active">Elections</a></li>
-                <li><a href="/admin/candidates">Candidates</a></li>
-                <li><a href="/admin/results">Results</a></li>
-                <li><a href="/admin/audit">Audit Logs</a></li>
-            </ul>
-        </aside>
+        <div class="admin-layout">
+            <aside class="admin-sidebar">
+                <h3>Management</h3>
+                <ul class="sidebar-nav">
+                    <li><a href="/admin/elections" class="active">Elections</a></li>
+                    <li><a href="/admin/candidates">Candidates</a></li>
+                    <li><a href="/admin/results">Results</a></li>
+                    <li><a href="/admin/audit">Audit Logs</a></li>
+                </ul>
+            </aside>
 
-        <main class="admin-main">
-            <div class="dashboard-grid">
-                <div class="stat-card">
-                    <h3>Total Students</h3>
-                    <div class="value">{{ stats.total_students }}</div>>
-                    <p style="font-size: 0.75rem; color: #64748b;">Registered users</p>
+            <main class="admin-main">
+                <div class="dashboard-grid">
+                    <div class="stat-card">
+                        <h3>Total Students</h3>
+                        <div class="value">{{ stats.total_students }}</div>>
+                        <p style="font-size: 0.75rem; color: #64748b;">Registered users</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Active Elections</h3>
+                        <div class="value">{{ stats.active_elections }}</div>>
+                        <p style="font-size: 0.75rem; color: #64748b;">Currently ongoing</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Pending Apps</h3>
+                        <div class="value">{{ stats.pending_apps }}</div>>
+                        <p style="font-size: 0.75rem; color: #64748b;">Candidates to review</p>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <h3>Active Elections</h3>
-                    <div class="value">{{ stats.active_elections }}</div>>
-                    <p style="font-size: 0.75rem; color: #64748b;">Currently ongoing</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Pending Apps</h3>
-                    <div class="value">{{ stats.pending_apps }}</div>>
-                    <p style="font-size: 0.75rem; color: #64748b;">Candidates to review</p>
-                </div>
-            </div>
 
-            <div style="margin-top: 2rem;">
-                <h3>Recent Activity</h3>
-                <table class="activity-table">
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Action</th>
-                            <th>Time</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>student_1@edu.com</td>
-                            <td>Applied for candidacy</td>
-                            <td>2 mins ago</td>
-                        </tr>
-                        <tr>
-                            <td>admin_main@edu.com</td>
-                            <td>Created "Student Council 2026"</td>
-                            <td>1 hour ago</td>
-                        </tr>
-                        <tr>
-                            <td>student_42@edu.com</td>
-                            <td>Submitted vote</td>
-                            <td>3 hours ago</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </main>
+                <div style="margin-top: 2rem;">
+                    <h3>Recent Activity</h3>
+                    <table class="activity-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Action</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>student_1@edu.com</td>
+                                <td>Applied for candidacy</td>
+                                <td>2 mins ago</td>
+                            </tr>
+                            <tr>
+                                <td>admin_main@edu.com</td>
+                                <td>Created "Student Council 2026"</td>
+                                <td>1 hour ago</td>
+                            </tr>
+                            <tr>
+                                <td>student_42@edu.com</td>
+                                <td>Submitted vote</td>
+                                <td>3 hours ago</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+        </div>
     </div>
 {% endblock %}

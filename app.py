@@ -78,6 +78,9 @@ async def debug_role(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    user = request.state.user
+    if user:
+        return RedirectResponse(url="/admin/dashboard" if user['role'].upper() == "ADMIN" else "/student/dashboard")
     return templates.TemplateResponse(
         request,
         "register.html",
