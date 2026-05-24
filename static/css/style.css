@@ -380,3 +380,21 @@ button:hover {
     font-size: 0.75rem;
     letter-spacing: 0.05em;
 }
+
+.badge-published {
+    background-color: var(--success-color);
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 1rem;
+    font-weight: 600;
+}
+
+.badge-hidden {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 1rem;
+    font-weight: 600;
+}

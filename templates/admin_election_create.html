@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Create Election - Voting System{% endblock %}
+
+{% block content %}
+<div class="page-card">
+    <div class="admin-layout">
+        <aside class="admin-sidebar">
+            <h3>Management</h3>
+            <ul class="sidebar-nav">
+                <li><a href="/admin/dashboard">Dashboard</a></li>
+                <li><a href="/admin/elections" class="active">Elections</a></li>
+                <li><a href="/admin/candidates">Candidates</a></li>
+                <li><a href="/admin/results">Results</a></li>
+                <li><a href="/admin/audit">Audit Logs</a></li>
+            </ul>
+        </aside>
+
+        <main class="admin-main">
+            <div class="dashboard-header">
+                <h1>Create New Election</h1>
+                <p>Define the title, description and schedule for the upcoming election.</p>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-error">{{ error }}</div>
+            {% endif %}
+
+            <form action="/admin/elections" method="POST" style="max-width: 600px;">
+                <div class="form-group">
+                    <label for="title">Election Title</label>
+                    <input type="text" id="title" name="title" required placeholder="e.g. Student Council 2026" value="{{ values.title if values else '' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" rows="4" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.5rem; font-family: inherit;" placeholder="Provide details about this election..." {{ values.description if values else '' }}>{{ values.description if values else '' }}</textarea>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.25rem;">
+                    <div class="form-group">
+                        <label for="start_time">Start Date & Time</label>
+                        <input type="datetime-local" id="start_time" name="start_time" required value="{{ values.start_time if values else '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="end_time">End Date & Time</label>
+                        <input type="datetime-local" id="end_time" name="end_time" required value="{{ values.end_time if values else '' }}">
+                    </div>
+                </div>
+
+                <div class="action-group">
+                    <button type="submit" class="btn-primary" style="width: auto; padding: 0.75rem 2rem;">Save Election</button>
+                    <a href="/admin/elections" class="btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </main>
+    </div>
+</div>
+{% endblock %}
