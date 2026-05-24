@@ -7,7 +7,16 @@
       "Bash(curl -X POST -d \"email=admin-test@voting.com&password=admin123\" \"http://127.0.0.1:8000/auth/admin-login\" -v)",
       "Bash(pytest *)",
       "Bash(python3 *)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(curl -I http://127.0.0.1:8000/admin/elections)",
+      "Bash(curl -I -b session_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJyb2xlIjoiQURNSU4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNzc5NzI4ODkzfQ.tO12apGSh4UQyxfZPXbuErJ0hHFlWDh0gs_E--rlbtg http://127.0.0.1:8000/admin/elections)",
+      "Bash(curl -I -b session_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJyb2xlIjoiQURNSU4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNzc5NzI4ODkzfQ.tO12apGSh4UQyxfZPXbuErJ0hHFlWDh0gs_E--rlbtg -d 'title=Test Election&description=Testing&start_time=2026-06-01T10:00&end_time=2026-06-01T18:00' http://127.0.0.1:8000/admin/elections)",
+      "Bash(curl -b session_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJyb2xlIjoiQURNSU4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNzc5NzI4ODkzfQ.tO12apGSh4UQyxfZPXbuErJ0hHFlWDh0gs_E--rlbtg -d 'title=Invalid Election&description=Testing&start_time=2026-06-01T18:00&end_time=2026-06-01T10:00' http://127.0.0.1:8000/admin/elections)",
+      "Bash(pkill -f uvicorn)",
+      "Bash(uvicorn app:app --reload)",
+      "Bash(curl -v http://127.0.0.1:8000/admin/elections)",
+      "Bash(curl -L -b session_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJyb2xlIjoiQURNSU4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNzc5NzI4ODkzfQ.tO12apGSh4UQyxfZPXbuErJ0hHFlWDh0gs_E--rlbtg http://127.0.0.1:8000/admin/elections)",
+      "Bash(curl -v -b session_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJyb2xlIjoiQURNSU4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNzc5NzI4ODkzfQ.tO12apGSh4UQyxfZPXbuErJ0hHFlWDh0gs_E--rlbtg -d 'title=Test Election&description=Testing&start_time=2026-06-01T10:00&end_time=2026-06-01T18:00' http://127.0.0.1:8000/admin/elections)"
     ]
   }
 }
