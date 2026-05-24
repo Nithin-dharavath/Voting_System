@@ -276,8 +276,8 @@ async def admin_login_user(
         )
 
 @app.get("/auth/logout")
-async def logout_user(response: Response):
-    response = RedirectResponse(url="/login")
+async def logout_user():
+    response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie(COOKIE_NAME)
     return response
 
