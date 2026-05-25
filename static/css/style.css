@@ -8,6 +8,8 @@
     --card-bg: #ffffff;
     --border-color: #e2e8f0;
     --accent-color: #3b82f6;
+    --color-admin-slate: #64748b;
+    --color-admin-error-bg: #fee2e2;
 }
 
 body {
@@ -248,7 +250,7 @@ button:hover {
 .stat-card h3 {
     margin: 0;
     font-size: 0.875rem;
-    color: #64748b;
+    color: var(--color-admin-slate);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-weight: 700;
@@ -273,7 +275,7 @@ button:hover {
 }
 
 .dashboard-header p {
-    color: #64748b;
+    color: var(--color-admin-slate);
     margin: 0;
     font-size: 1.125rem;
 }
@@ -374,7 +376,7 @@ button:hover {
 
 .activity-table th {
     background-color: #f8fafc;
-    color: #64748b;
+    color: var(--color-admin-slate);
     font-weight: 700;
     text-transform: uppercase;
     font-size: 0.75rem;

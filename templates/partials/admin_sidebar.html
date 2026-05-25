@@ -1,0 +1,10 @@
+<aside class="admin-sidebar">
+    <h3>Management</h3>
+    <ul class="sidebar-nav">
+        <li><a href="/admin/dashboard">Dashboard</a></li>
+        <li><a href="/admin/elections" class="{{ 'active' if request.url.path == '/admin/elections' else '' }}">Elections</a></li>
+        <li><a href="/admin/candidates">Candidates</a></li>
+        <li><a href="/admin/results">Results</a></li>
+        <li><a href="/admin/audit">Audit Logs</a></li>
+    </ul>
+</aside>

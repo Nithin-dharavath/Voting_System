@@ -4,16 +4,7 @@
 {% block content %}
 <div class="page-card">
     <div class="admin-layout">
-        <aside class="admin-sidebar">
-            <h3>Management</h3>
-            <ul class="sidebar-nav">
-                <li><a href="/admin/dashboard">Dashboard</a></li>
-                <li><a href="/admin/elections" class="active">Elections</a></li>
-                <li><a href="/admin/candidates">Candidates</a></li>
-                <li><a href="/admin/results">Results</a></li>
-                <li><a href="/admin/audit">Audit Logs</a></li>
-            </ul>
-        </aside>
+        {% include 'partials/admin_sidebar.html' %}
 
         <main class="admin-main">
             <div class="dashboard-header">
@@ -26,6 +17,7 @@
             {% endif %}
 
             <form action="/admin/elections/{{ election.id }}/update" method="POST" style="max-width: 600px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <div class="form-group">
                     <label for="title">Election Title</label>
                     <input type="text" id="title" name="title" required placeholder="e.g. Student Council 2026" value="{{ election.title }}">
