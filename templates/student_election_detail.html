@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}{{ election.title }} - Online Voting System{% endblock %}
+
+{% block content %}
+<div class="page-card">
+    <div class="dashboard-header">
+        <a href="/student/elections" class="back-link">← Back to Elections</a>
+        <h1>{{ election.title }}</h1>
+        <span class="status-badge status-{{ election.status.lower() }}">
+            {{ election.status }}
+        </span>
+    </div>
+
+    <div class="election-details">
+        <div class="detail-item">
+            <label>Description</label>
+            <p>{{ election.description }}</p>
+        </div>
+
+        <div class="detail-grid">
+            <div class="detail-item">
+                <label>Start Time</label>
+                <p>{{ election.start_time.strftime('%B %d, %Y at %I:%M %p') if election.start_time else 'N/A' }}</p>
+            </div>
+            <div class="detail-item">
+                <label>End Time</label>
+                <p>{{ election.end_time.strftime('%B %d, %Y at %I:%M %p') if election.end_time else 'N/A' }}</p>
+            </div>
+        </div>
+
+        <div class="action-group centered">
+            {% if election.status == 'UPCOMING' %}
+                <a href="/student/elections/{{ election.id }}/apply" class="btn-primary">Apply as Candidate</a>
+            {% elif election.status == 'ACTIVE' %}
+                <a href="/student/elections/{{ election.id }}/vote" class="btn-primary">Vote Now</a>
+            {% elif election.status == 'ENDED' %}
+                <a href="/student/results/{{ election.id }}" class="btn-primary">View Results</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
