@@ -41,6 +41,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="templates")
 
+class RedirectException(Exception):
+    def __init__(self, url: str, status_code: int = 302):
+        self.url = url
+        self.status_code = status_code
+
+@app.exception_handler(RedirectException)
+async def redirect_exception_handler(request: Request, exc: RedirectException):
+    return RedirectResponse(url=exc.url, status_code=exc.status_code)
+
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-key-change-this-in-env")
 JWT_ALGORITHM = "HS256"
 COOKIE_NAME = "session_token"
@@ -117,12 +126,12 @@ async def get_current_user(request: Request):
 
 async def admin_guard(request: Request, user = Depends(get_current_user)):
     if not user or user['role'].upper() != 'ADMIN':
-        return RedirectResponse(url="/admin/login", status_code=302)
+        raise RedirectException(url="/admin/login")
     return user
 
 async def student_guard(request: Request, user = Depends(get_current_user)):
     if not user or user['role'].upper() != 'STUDENT':
-        return RedirectResponse(url="/login", status_code=302)
+        raise RedirectException(url="/login")
     return user
 
 @app.get("/debug-role")
