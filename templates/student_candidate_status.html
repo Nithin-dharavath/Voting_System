@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <h1 class="page-title">My Candidate Applications</h1>
+
+    {% if applications %}
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Election</th>
+                    <th>Status</th>
+                    <th>Applied Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for app in applications %}
+                <tr>
+                    <td>{{ app.election_title }}</td>
+                    <td>
+                        <span class="badge {% if app.approval_status == 'APPROVED' %}badge-success{% elif app.approval_status == 'REJECTED' %}badge-danger{% else %}badge-warning{% endif %}">
+                            {{ app.approval_status }}
+                        </span>
+                    </td>
+                    <td>{{ app.applied_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>You haven't applied as a candidate for any elections yet.</p>
+        <a href="/student/elections" class="btn-primary">View Upcoming Elections</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
