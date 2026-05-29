@@ -41,6 +41,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="templates")
 
+class RedirectException(Exception):
+    def __init__(self, url: str, status_code: int = 302):
+        self.url = url
+        self.status_code = status_code
+
+@app.exception_handler(RedirectException)
+async def redirect_exception_handler(request: Request, exc: RedirectException):
+    return RedirectResponse(url=exc.url, status_code=exc.status_code)
+
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-key-change-this-in-env")
 JWT_ALGORITHM = "HS256"
 COOKIE_NAME = "session_token"
@@ -99,7 +108,7 @@ async def verify_csrf(request: Request, token: str = Form(None)):
 
 def get_election_by_id(election_id: int):
     with get_db_cursor() as cursor:
-        cursor.execute("SELECT id, title, description, start_time, end_time, result_published FROM elections WHERE id = %s", (election_id,))
+        cursor.execute("SELECT id, title, description, start_time, end_time, result_published, status FROM elections WHERE id = %s", (election_id,))
         election = cursor.fetchone()
         if election:
             election['start_time'] = ensure_datetime(election['start_time'])
@@ -117,7 +126,12 @@ async def get_current_user(request: Request):
 
 async def admin_guard(request: Request, user = Depends(get_current_user)):
     if not user or user['role'].upper() != 'ADMIN':
-        return RedirectResponse(url="/admin/login", status_code=302)
+        raise RedirectException(url="/admin/login")
+    return user
+
+async def student_guard(request: Request, user = Depends(get_current_user)):
+    if not user or user['role'].upper() != 'STUDENT':
+        raise RedirectException(url="/login")
     return user
 
 @app.get("/debug-role")
@@ -327,6 +341,37 @@ async def student_dashboard(request: Request, user = Depends(get_current_user)):
         request=request,
         name="student_dashboard.html",
         context={"user": user}
+    )
+
+@app.get("/student/elections", response_class=HTMLResponse)
+async def student_elections_list(request: Request, user = Depends(student_guard)):
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT id, title, description, start_time, end_time, status FROM elections ORDER BY start_time ASC")
+        elections = cursor.fetchall()
+        for e in elections:
+            e['start_time'] = ensure_datetime(e['start_time'])
+            e['end_time'] = ensure_datetime(e['end_time'])
+
+    active = [e for e in elections if e['status'] == 'ACTIVE']
+    upcoming = [e for e in elections if e['status'] == 'UPCOMING']
+    ended = [e for e in elections if e['status'] == 'ENDED']
+
+    return templates.TemplateResponse(
+        request,
+        "student_elections.html",
+        {"request": request, "active": active, "upcoming": upcoming, "ended": ended, "user": user}
+    )
+
+@app.get("/student/elections/{id}", response_class=HTMLResponse)
+async def student_election_detail(request: Request, id: int, user = Depends(student_guard)):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/student/elections", status_code=302)
+
+    return templates.TemplateResponse(
+        request,
+        "student_election_detail.html",
+        {"request": request, "election": election, "user": user}
     )
 
 @app.get("/admin/dashboard", response_class=HTMLResponse)
