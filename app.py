@@ -99,12 +99,12 @@ async def get_csrf_token(request: Request):
         token = generate_csrf_token()
     return token
 
-async def verify_csrf(request: Request, token: str = Form(None)):
+async def verify_csrf(request: Request, csrf_token: str = Form(None)):
     cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
-    if not cookie_token or not token or cookie_token != token:
+    if not cookie_token or not csrf_token or cookie_token != csrf_token:
         logger.warning(f"CSRF verification failed for user {request.state.user}")
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
-    return token
+    return csrf_token
 
 def get_election_by_id(election_id: int):
     with get_db_cursor() as cursor:
@@ -114,6 +114,11 @@ def get_election_by_id(election_id: int):
             election['start_time'] = ensure_datetime(election['start_time'])
             election['end_time'] = ensure_datetime(election['end_time'])
         return election
+
+def has_user_applied(user_id: int, election_id: int) -> bool:
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT id FROM candidate_applications WHERE user_id = %s AND election_id = %s", (user_id, election_id))
+        return cursor.fetchone() is not None
 
 async def get_current_user(request: Request):
     token = request.cookies.get(COOKIE_NAME)
@@ -368,9 +373,7 @@ async def student_election_detail(request: Request, id: int, user = Depends(stud
     if not election:
         return RedirectResponse(url="/student/elections", status_code=302)
 
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id FROM candidate_applications WHERE user_id = %s AND election_id = %s", (user['user_id'], id))
-        has_applied = cursor.fetchone() is not None
+    has_applied = has_user_applied(user['user_id'], id)
 
     return templates.TemplateResponse(
         request,
@@ -387,10 +390,8 @@ async def student_election_apply_page(request: Request, id: int, user = Depends(
     if election['status'] != 'UPCOMING':
         return RedirectResponse(url="/student/elections", status_code=302)
 
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id FROM candidate_applications WHERE user_id = %s AND election_id = %s", (user['user_id'], id))
-        if cursor.fetchone():
-            return RedirectResponse(url="/student/candidate-status", status_code=302)
+    if has_user_applied(user['user_id'], id):
+        return RedirectResponse(url="/student/candidate-status", status_code=302)
 
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
@@ -413,11 +414,10 @@ async def apply_as_candidate(
     if not election or election['status'] != 'UPCOMING':
         return RedirectResponse(url="/student/elections", status_code=302)
 
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id FROM candidate_applications WHERE user_id = %s AND election_id = %s", (user['user_id'], election_id))
-        if cursor.fetchone():
-            return RedirectResponse(url="/student/candidate-status", status_code=302)
+    if has_user_applied(user['user_id'], election_id):
+        return RedirectResponse(url="/student/candidate-status", status_code=302)
 
+    with get_db_cursor() as cursor:
         query = "INSERT INTO candidate_applications (user_id, election_id, manifesto, approval_status) VALUES (%s, %s, %s, 'PENDING')"
         cursor.execute(query, (user['user_id'], election_id, manifesto))
 

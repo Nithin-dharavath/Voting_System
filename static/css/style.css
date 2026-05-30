@@ -8,6 +8,8 @@
     --card-bg: #ffffff;
     --border-color: #e2e8f0;
     --accent-color: #3b82f6;
+    --accent-hover: #2563eb;
+    --bg-light: #f8fafc;
     --color-admin-slate: #64748b;
     --color-admin-error-bg: #fee2e2;
 }
@@ -399,4 +401,157 @@ button:hover {
     padding: 0.25rem 0.5rem;
     border-radius: 1rem;
     font-weight: 600;
+}
+
+/* Election List Styles */
+.elections-container {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+}
+
+.election-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.section-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin: 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.section-title::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--border-color);
+}
+
+.section-title.active {
+    border-bottom-color: var(--success-color);
+}
+.section-title.active::before {
+    background-color: var(--success-color);
+}
+
+.section-title.upcoming {
+    border-bottom-color: var(--accent-color);
+}
+.section-title.upcoming::before {
+    background-color: var(--accent-color);
+}
+
+.section-title.ended {
+    border-bottom-color: var(--color-admin-slate);
+}
+.section-title.ended::before {
+    background-color: var(--color-admin-slate);
+}
+
+.election-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+}
+
+.election-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 1.25rem;
+    padding: 1.75rem;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+    position: relative;
+    overflow: hidden;
+}
+
+.election-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 12px 20px -5px rgba(0, 0, 0, 0.1);
+    border-color: var(--accent-color);
+}
+
+.election-card h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--primary-color);
+    letter-spacing: -0.025em;
+}
+
+.election-desc {
+    font-size: 0.9375rem;
+    color: var(--text-color);
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+    flex-grow: 1;
+    opacity: 0.9;
+}
+
+.election-meta {
+    font-size: 0.75rem;
+    color: var(--color-admin-slate);
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+    background: var(--bg-light);
+    padding: 0.4rem 0.75rem;
+    border-radius: 2rem;
+    width: fit-content;
+}
+
+.btn-vote {
+    background-color: var(--accent-color);
+    color: white;
+    text-decoration: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.btn-vote:hover {
+    background-color: var(--accent-hover);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.btn-details {
+    background-color: white;
+    color: var(--text-color);
+    text-decoration: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-align: center;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+}
+
+.btn-details:hover {
+    background-color: #f8fafc;
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.no-elections {
+    text-align: center;
+    padding: 5rem 0;
+    color: var(--color-admin-slate);
+    font-style: italic;
 }

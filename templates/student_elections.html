@@ -19,9 +19,9 @@
                     <h3>{{ election.title }}</h3>
                     <p class="election-desc">{{ election.description }}</p>
                     <div class="election-meta">
-                        <span>Ends: {{ election.end_time.strftime('%Y-%m-%d %H:%M') if election.end_time else 'N/A' }}</span>
+                        <span>📅 Ends: {{ election.end_time.strftime('%Y-%m-%d %H:%M') if election.end_time else 'N/A' }}</span>
                     </div>
-                    <a href="/student/elections/{{ election.id }}" class="btn-primary">View Details & Vote</a>
+                    <a href="/student/elections/{{ election.id }}" class="btn-vote">Vote Now</a>
                 </div>
                 {% endfor %}
             </div>
@@ -37,9 +37,9 @@
                     <h3>{{ election.title }}</h3>
                     <p class="election-desc">{{ election.description }}</p>
                     <div class="election-meta">
-                        <span>Starts: {{ election.start_time.strftime('%Y-%m-%d %H:%M') if election.start_time else 'N/A' }}</span>
+                        <span>🚀 Starts: {{ election.start_time.strftime('%Y-%m-%d %H:%M') if election.start_time else 'N/A' }}</span>
                     </div>
-                    <a href="/student/elections/{{ election.id }}" class="btn-secondary">View Details</a>
+                    <a href="/student/elections/{{ election.id }}" class="btn-details">View Details</a>
                 </div>
                 {% endfor %}
             </div>
@@ -55,9 +55,9 @@
                     <h3>{{ election.title }}</h3>
                     <p class="election-desc">{{ election.description }}</p>
                     <div class="election-meta">
-                        <span>Ended: {{ election.end_time.strftime('%Y-%m-%d %H:%M') if election.end_time else 'N/A' }}</span>
+                        <span>🏁 Ended: {{ election.end_time.strftime('%Y-%m-%d %H:%M') if election.end_time else 'N/A' }}</span>
                     </div>
-                    <a href="/student/elections/{{ election.id }}" class="btn-secondary">View Results</a>
+                    <a href="/student/elections/{{ election.id }}" class="btn-details">View Results</a>
                 </div>
                 {% endfor %}
             </div>

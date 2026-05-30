@@ -9,7 +9,6 @@ def table_exists(cursor, table_name):
 def seed_database():
     print("\n--- Database Seeding Started ---")
 
-
     # Define seed data
     admin_user = {
         "full_name": "System Administrator",
@@ -47,6 +46,7 @@ def seed_database():
             "description": "Election for the General Secretary position.",
             "start_time": now + datetime.timedelta(days=7),
             "end_time": now + datetime.timedelta(days=8),
+            "status": "UPCOMING",
             "result_published": 0
         },
         {
@@ -54,6 +54,7 @@ def seed_database():
             "description": "Election for the Student Council President.",
             "start_time": now - datetime.timedelta(days=1),
             "end_time": now + datetime.timedelta(days=1),
+            "status": "ACTIVE",
             "result_published": 0
         },
         {
@@ -61,6 +62,7 @@ def seed_database():
             "description": "Election for the Cultural Fest Lead.",
             "start_time": now - datetime.timedelta(days=60),
             "end_time": now - datetime.timedelta(days=59),
+            "status": "ENDED",
             "result_published": 1
         }
     ]
@@ -87,12 +89,12 @@ def seed_database():
 
             cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
 
-
             # 2. Insert Admin User
             if table_exists(cursor, "users"):
                 print(f"Ensuring admin user exists: {admin_user['email']}...")
                 cursor.execute("SELECT id FROM users WHERE email = %s", (admin_user['email'],))
-                if not cursor.fetchone():
+                row = cursor.fetchone()
+                if not row:
                     hashed_pw = generate_password_hash(admin_user['password'])
                     query = "INSERT INTO users (full_name, email, password_hash, department, academic_year, role) VALUES (%s, %s, %s, %s, %s, %s)"
                     cursor.execute(query, (
@@ -105,19 +107,19 @@ def seed_database():
                     ))
                     admin_id = cursor.lastrowid
                 else:
-                    cursor.execute("SELECT id FROM users WHERE email = %s", (admin_user['email'],))
-                    admin_id = cursor.fetchone()['id']
+                    admin_id = row['id']
             else:
                 print("Skipping User insertion: Table 'users' does not exist.")
                 admin_id = None
 
-
             # 3. Insert Student Users
+            student_ids = []
             if table_exists(cursor, "users"):
                 for student in student_users:
                     print(f"Ensuring student user exists: {student['email']}...")
                     cursor.execute("SELECT id FROM users WHERE email = %s", (student['email'],))
-                    if not cursor.fetchone():
+                    row = cursor.fetchone()
+                    if not row:
                         hashed_pw = generate_password_hash(student['password'])
                         query = "INSERT INTO users (full_name, email, password_hash, department, academic_year, role) VALUES (%s, %s, %s, %s, %s, %s)"
                         cursor.execute(query, (
@@ -128,31 +130,50 @@ def seed_database():
                             student['academic_year'],
                             student['role']
                         ))
+                        student_ids.append(cursor.lastrowid)
                     else:
                         print(f"User {student['email']} already exists, skipping.")
+                        student_ids.append(row['id'])
             else:
                 print("Skipping Student insertion: Table 'users' does not exist.")
 
-
             # 4. Insert Elections
+            election_ids = []
             if table_exists(cursor, "elections"):
                 if admin_id:
                     print("Inserting test elections...")
                     for election in elections:
-                        query = "INSERT INTO elections (title, description, start_time, end_time, result_published, created_by) VALUES (%s, %s, %s, %s, %s, %s)"
+                        query = "INSERT INTO elections (title, description, start_time, end_time, status, result_published, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)"
                         cursor.execute(query, (
                             election['title'],
                             election['description'],
                             election['start_time'],
                             election['end_time'],
+                            election['status'],
                             election['result_published'],
                             admin_id
                         ))
+                        election_ids.append(cursor.lastrowid)
                 else:
                     print("Skipping Election insertion: Admin user not found/created.")
             else:
                 print("Skipping Election insertion: Table 'elections' does not exist.")
 
+            # 5. Insert Candidate Applications for testing
+            if table_exists(cursor, "candidate_applications") and student_ids and election_ids:
+                print("Inserting test candidate applications...")
+                # Application 1: Alice applied to General Secretary (Upcoming) -> PENDING
+                # Application 2: Bob applied to General Secretary (Upcoming) -> APPROVED
+                # Application 3: Alice applied to Student Council President (Active/Past) -> REJECTED
+
+                apps = [
+                    (student_ids[0], election_ids[0], "I will bring transparency and efficiency to the student body.", "PENDING"),
+                    (student_ids[1], election_ids[0], "Experienced leader with a vision for growth.", "APPROVED"),
+                    (student_ids[0], election_ids[1], "My goal was to improve campus facilities.", "REJECTED"),
+                ]
+
+                query = "INSERT INTO candidate_applications (user_id, election_id, manifesto, approval_status) VALUES (%s, %s, %s, %s)"
+                cursor.executemany(query, apps)
 
             print("\n--- Database seeding completed successfully! ---")
 
