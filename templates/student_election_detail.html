@@ -30,7 +30,7 @@
         </div>
 
         <div class="action-group centered">
-            {% if election.status == 'UPCOMING' %}
+            {% if election.status == 'UPCOMING' and not has_applied %}
                 <a href="/student/elections/{{ election.id }}/apply" class="btn-primary">Apply as Candidate</a>
             {% elif election.status == 'ACTIVE' %}
                 <a href="/student/elections/{{ election.id }}/vote" class="btn-primary">Vote Now</a>

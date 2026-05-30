@@ -99,12 +99,12 @@ async def get_csrf_token(request: Request):
         token = generate_csrf_token()
     return token
 
-async def verify_csrf(request: Request, token: str = Form(None)):
+async def verify_csrf(request: Request, csrf_token: str = Form(None)):
     cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
-    if not cookie_token or not token or cookie_token != token:
+    if not cookie_token or not csrf_token or cookie_token != csrf_token:
         logger.warning(f"CSRF verification failed for user {request.state.user}")
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
-    return token
+    return csrf_token
 
 def get_election_by_id(election_id: int):
     with get_db_cursor() as cursor:
@@ -114,6 +114,11 @@ def get_election_by_id(election_id: int):
             election['start_time'] = ensure_datetime(election['start_time'])
             election['end_time'] = ensure_datetime(election['end_time'])
         return election
+
+def has_user_applied(user_id: int, election_id: int) -> bool:
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT id FROM candidate_applications WHERE user_id = %s AND election_id = %s", (user_id, election_id))
+        return cursor.fetchone() is not None
 
 async def get_current_user(request: Request):
     token = request.cookies.get(COOKIE_NAME)
@@ -368,10 +373,75 @@ async def student_election_detail(request: Request, id: int, user = Depends(stud
     if not election:
         return RedirectResponse(url="/student/elections", status_code=302)
 
+    has_applied = has_user_applied(user['user_id'], id)
+
     return templates.TemplateResponse(
         request,
         "student_election_detail.html",
-        {"request": request, "election": election, "user": user}
+        {"request": request, "election": election, "user": user, "has_applied": has_applied}
+    )
+
+@app.get("/student/elections/{id}/apply", response_class=HTMLResponse)
+async def student_election_apply_page(request: Request, id: int, user = Depends(student_guard)):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/student/elections", status_code=302)
+
+    if election['status'] != 'UPCOMING':
+        return RedirectResponse(url="/student/elections", status_code=302)
+
+    if has_user_applied(user['user_id'], id):
+        return RedirectResponse(url="/student/candidate-status", status_code=302)
+
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "student_election_apply.html",
+        {"request": request, "election": election, "user": user, "csrf_token": csrf_token}
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=False)
+    return response
+
+@app.post("/candidates/apply")
+async def apply_as_candidate(
+    request: Request,
+    election_id: int = Form(...),
+    manifesto: str = Form(...),
+    user = Depends(student_guard),
+    csrf_token = Depends(verify_csrf)
+):
+    election = get_election_by_id(election_id)
+    if not election or election['status'] != 'UPCOMING':
+        return RedirectResponse(url="/student/elections", status_code=302)
+
+    if has_user_applied(user['user_id'], election_id):
+        return RedirectResponse(url="/student/candidate-status", status_code=302)
+
+    with get_db_cursor() as cursor:
+        query = "INSERT INTO candidate_applications (user_id, election_id, manifesto, approval_status) VALUES (%s, %s, %s, 'PENDING')"
+        cursor.execute(query, (user['user_id'], election_id, manifesto))
+
+    return RedirectResponse(url="/student/candidate-status", status_code=303)
+
+@app.get("/student/candidate-status", response_class=HTMLResponse)
+async def student_candidate_status(request: Request, user = Depends(student_guard)):
+    with get_db_cursor() as cursor:
+        query = """
+        SELECT ca.id, ca.approval_status, ca.applied_at, e.title as election_title
+        FROM candidate_applications ca
+        JOIN elections e ON ca.election_id = e.id
+        WHERE ca.user_id = %s
+        ORDER BY ca.applied_at DESC
+        """
+        cursor.execute(query, (user['user_id'],))
+        applications = cursor.fetchall()
+        for app in applications:
+            app['applied_at'] = ensure_datetime(app['applied_at']).strftime('%Y-%m-%d %H:%M') if app['applied_at'] else None
+
+    return templates.TemplateResponse(
+        request,
+        "student_candidate_status.html",
+        {"request": request, "applications": applications, "user": user}
     )
 
 @app.get("/admin/dashboard", response_class=HTMLResponse)
