@@ -367,6 +367,21 @@ async def student_elections_list(request: Request, user = Depends(student_guard)
         {"request": request, "active": active, "upcoming": upcoming, "ended": ended, "user": user}
     )
 
+@app.get("/student/elections/apply", response_class=HTMLResponse)
+async def student_election_apply_list(request: Request, user = Depends(student_guard)):
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT id, title, description, start_time, end_time, status FROM elections WHERE status = 'UPCOMING' ORDER BY start_time ASC")
+        upcoming = cursor.fetchall()
+        for e in upcoming:
+            e['start_time'] = ensure_datetime(e['start_time'])
+            e['end_time'] = ensure_datetime(e['end_time'])
+
+    return templates.TemplateResponse(
+        request,
+        "student_election_apply_list.html",
+        {"request": request, "upcoming": upcoming, "user": user}
+    )
+
 @app.get("/student/elections/{id}", response_class=HTMLResponse)
 async def student_election_detail(request: Request, id: int, user = Depends(student_guard)):
     election = get_election_by_id(id)
