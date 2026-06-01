@@ -35,6 +35,22 @@ def seed_database():
             "department": "Electrical Engineering",
             "academic_year": "2025-26",
             "role": "STUDENT"
+        },
+        {
+            "full_name": "Charlie Student",
+            "email": "charlie@college.edu",
+            "password": "studentpassword123",
+            "department": "Mathematics",
+            "academic_year": "2025-26",
+            "role": "STUDENT"
+        },
+        {
+            "full_name": "Diana Student",
+            "email": "diana@college.edu",
+            "password": "studentpassword123",
+            "department": "Physics",
+            "academic_year": "2025-26",
+            "role": "STUDENT"
         }
     ]
 
@@ -92,7 +108,7 @@ def seed_database():
             # 2. Insert Admin User
             if table_exists(cursor, "users"):
                 print(f"Ensuring admin user exists: {admin_user['email']}...")
-                cursor.execute("SELECT id FROM users WHERE email = %s", (admin_user['email'],))
+                cursor.execute("SELECT user_id FROM users WHERE email = %s", (admin_user['email'],))
                 row = cursor.fetchone()
                 if not row:
                     hashed_pw = generate_password_hash(admin_user['password'])
@@ -107,7 +123,7 @@ def seed_database():
                     ))
                     admin_id = cursor.lastrowid
                 else:
-                    admin_id = row['id']
+                    admin_id = row['user_id']
             else:
                 print("Skipping User insertion: Table 'users' does not exist.")
                 admin_id = None
@@ -117,7 +133,7 @@ def seed_database():
             if table_exists(cursor, "users"):
                 for student in student_users:
                     print(f"Ensuring student user exists: {student['email']}...")
-                    cursor.execute("SELECT id FROM users WHERE email = %s", (student['email'],))
+                    cursor.execute("SELECT user_id FROM users WHERE email = %s", (student['email'],))
                     row = cursor.fetchone()
                     if not row:
                         hashed_pw = generate_password_hash(student['password'])
@@ -133,7 +149,7 @@ def seed_database():
                         student_ids.append(cursor.lastrowid)
                     else:
                         print(f"User {student['email']} already exists, skipping.")
-                        student_ids.append(row['id'])
+                        student_ids.append(row['user_id'])
             else:
                 print("Skipping Student insertion: Table 'users' does not exist.")
 
@@ -162,17 +178,18 @@ def seed_database():
             # 5. Insert Candidate Applications for testing
             if table_exists(cursor, "candidate_applications") and student_ids and election_ids:
                 print("Inserting test candidate applications...")
-                # Application 1: Alice applied to General Secretary (Upcoming) -> PENDING
-                # Application 2: Bob applied to General Secretary (Upcoming) -> APPROVED
-                # Application 3: Alice applied to Student Council President (Active/Past) -> REJECTED
-
+                # Mix of statuses to test all views
+                # (user_id, election_id, manifesto, status, reviewed_by)
                 apps = [
-                    (student_ids[0], election_ids[0], "I will bring transparency and efficiency to the student body.", "PENDING"),
-                    (student_ids[1], election_ids[0], "Experienced leader with a vision for growth.", "APPROVED"),
-                    (student_ids[0], election_ids[1], "My goal was to improve campus facilities.", "REJECTED"),
+                    (student_ids[0], election_ids[0], "I will bring transparency and efficiency to the student body.", "PENDING", None),
+                    (student_ids[1], election_ids[0], "Experienced leader with a vision for lauter growth.", "PENDING", None),
+                    (student_ids[2], election_ids[0], "Focused on academic excellence and student support.", "APPROVED", admin_id),
+                    (student_ids[3], election_ids[0], "Passion for arts and culture on campus.", "REJECTED", admin_id),
+                    (student_ids[0], election_ids[1], "Bringing a new perspective to the council.", "APPROVED", admin_id),
+                    (student_ids[1], election_ids[1], "Dedicated to improving campus facilities.", "REJECTED", admin_id),
                 ]
 
-                query = "INSERT INTO candidate_applications (user_id, election_id, manifesto, approval_status) VALUES (%s, %s, %s, %s)"
+                query = "INSERT INTO candidate_applications (user_id, election_id, manifesto, approval_status, reviewed_by) VALUES (%s, %s, %s, %s, %s)"
                 cursor.executemany(query, apps)
 
             print("\n--- Database seeding completed successfully! ---")

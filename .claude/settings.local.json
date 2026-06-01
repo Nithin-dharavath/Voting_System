@@ -16,7 +16,8 @@
       "Bash(uvicorn app:app --reload)",
       "Bash(curl -v http://127.0.0.1:8000/admin/elections)",
       "Bash(curl -L -b session_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJyb2xlIjoiQURNSU4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNzc5NzI4ODkzfQ.tO12apGSh4UQyxfZPXbuErJ0hHFlWDh0gs_E--rlbtg http://127.0.0.1:8000/admin/elections)",
-      "Bash(curl -v -b session_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJyb2xlIjoiQURNSU4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNzc5NzI4ODkzfQ.tO12apGSh4UQyxfZPXbuErJ0hHFlWDh0gs_E--rlbtg -d 'title=Test Election&description=Testing&start_time=2026-06-01T10:00&end_time=2026-06-01T18:00' http://127.0.0.1:8000/admin/elections)"
+      "Bash(curl -v -b session_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJyb2xlIjoiQURNSU4iLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwiZXhwIjoxNzc5NzI4ODkzfQ.tO12apGSh4UQyxfZPXbuErJ0hHFlWDh0gs_E--rlbtg -d 'title=Test Election&description=Testing&start_time=2026-06-01T10:00&end_time=2026-06-01T18:00' http://127.0.0.1:8000/admin/elections)",
+      "mcp__plugin_figma_figma__get_design_context"
     ]
   }
 }

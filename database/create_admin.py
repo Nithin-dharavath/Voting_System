@@ -19,7 +19,7 @@ def create_admin():
     try:
         with get_db_cursor() as cursor:
             # Check if admin already exists
-            cursor.execute("SELECT id FROM users WHERE email = %s", (email,))
+            cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
             if cursor.fetchone():
                 print(f"\nError: User with email {email} already exists.")
                 return
