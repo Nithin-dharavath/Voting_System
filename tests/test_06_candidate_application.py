@@ -17,7 +17,7 @@ def setup_db():
         # Clear existing applications for the test user/election
         cursor.execute("DELETE FROM candidate_applications")
         # Ensure we have a test student
-        cursor.execute("INSERT IGNORE INTO users (id, full_name, email, password_hash, department, academic_year, role) VALUES (1, 'Test Student', 'student@example.com', 'hashed_pw', 'CS', '2023', 'STUDENT')")
+        cursor.execute("INSERT IGNORE INTO users (user_id, full_name, email, password_hash, department, academic_year, role) VALUES (1, 'Test Student', 'student@example.com', 'hashed_pw', 'CS', '2023', 'STUDENT')")
         # Ensure we have test elections
         cursor.execute("DELETE FROM elections WHERE id IN (1, 2, 3)")
         cursor.execute("INSERT INTO elections (id, title, description, start_time, end_time, status) VALUES (1, 'Upcoming Election', 'Desc', '2026-06-01 00:00:00', '2026-06-02 00:00:00', 'UPCOMING')")

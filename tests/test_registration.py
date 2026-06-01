@@ -48,7 +48,7 @@ def test_register_user_success(mock_cursor):
 
     # Verify database interaction
     # Check that email check was performed
-    mock_cursor.execute.assert_any_call("SELECT id FROM users WHERE email = %s", ("john@example.com",))
+    mock_cursor.execute.assert_any_call("SELECT user_id FROM users WHERE email = %s", ("john@example.com",))
 
     # Check that user was inserted
     # We look for a call that contains 'INSERT INTO users'
@@ -67,7 +67,7 @@ def test_register_user_success(mock_cursor):
 def test_register_user_duplicate_email(mock_cursor):
     """Test registration fails for duplicate email."""
     # Mock that a user with this email already exists
-    mock_cursor.fetchone.return_value = {"id": 1}
+    mock_cursor.fetchone.return_value = {"user_id": 1}
 
     payload = {
         "full_name": "John Doe",

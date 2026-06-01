@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Apply as Candidate - Online Voting System{% endblock %}
+
+{% block content %}
+<div class="page-card">
+    <div class="dashboard-header">
+        <h1>Apply as Candidate</h1>
+        <p>Select an upcoming election you wish to contest.</p>
+    </div>
+
+    <div class="elections-container">
+        {% if upcoming %}
+        <section class="election-section">
+            <h2 class="section-title upcoming">Upcoming Elections</h2>
+            <div class="election-grid">
+                {% for election in upcoming %}
+                <div class="election-card">
+                    <h3>{{ election.title }}</h3>
+                    <p class="election-desc">{{ election.description }}</p>
+                    <div class="election-meta">
+                        <span>🚀 Starts: {{ election.start_time.strftime('%Y-%m-%d %H:%M') if election.start_time else 'N/A' }}</span>
+                    </div>
+                    <a href="/student/elections/{{ election.id }}/apply" class="btn-primary">Apply Now</a>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% else %}
+        <div class="no-elections">
+            <p>No upcoming elections are available for application at the moment.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

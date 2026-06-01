@@ -21,7 +21,7 @@ def mock_cursor():
 @pytest.fixture
 def student_user():
     return {
-        "id": 1,
+        "user_id": 1,
         "email": "student@example.com",
         "password_hash": generate_password_hash("studentpass123"),
         "role": "STUDENT"
@@ -30,7 +30,7 @@ def student_user():
 @pytest.fixture
 def admin_user():
     return {
-        "id": 2,
+        "user_id": 2,
         "email": "admin@example.com",
         "password_hash": generate_password_hash("adminpass123"),
         "role": "ADMIN"
