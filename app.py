@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request, Form, HTTPException, Depends, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, Form, HTTPException, Depends, Response, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -8,6 +8,8 @@ import jwt
 import os
 import secrets
 import logging
+import uuid
+import shutil
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -43,6 +45,10 @@ app = FastAPI()
 
 # Mount the static directory to serve CSS, JS and images
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# Ensure uploads directory exists
+os.makedirs("uploads/profiles", exist_ok=True)
 
 templates = Jinja2Templates(directory="templates")
 
@@ -744,8 +750,39 @@ async def admin_candidates_pending_redirect():
 
 
 @app.get("/admin/candidates/approved", response_class=HTMLResponse)
-async def admin_candidates_approved_redirect(user = Depends(admin_guard)):
-    return RedirectResponse(url="/admin/candidates?status=APPROVED", status_code=302)
+async def admin_candidates_approved(request: Request, user = Depends(admin_guard)):
+    try:
+        with get_db_cursor() as cursor:
+            query = """
+            SELECT ca.*, u.full_name as applicant_name, u.department, e.title as election_title
+            FROM candidate_applications ca
+            JOIN users u ON ca.user_id = u.user_id
+            JOIN elections e ON ca.election_id = e.id
+            WHERE ca.approval_status = 'APPROVED'
+            ORDER BY ca.applied_at DESC
+            """
+            cursor.execute(query)
+            applications = cursor.fetchall()
+            for app in applications:
+                app['applied_at'] = format_datetime_simple(app['applied_at'])
+    except Exception:
+        logger.exception("Failed to fetch approved candidates")
+        return RedirectResponse(url="/admin/dashboard?error=internal", status_code=303)
+
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "admin_candidates_approved.html",
+        {
+            "request": request,
+            "applications": applications,
+            "user": user,
+            "csrf_token": csrf_token
+        }
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    return response
+
 
 
 
