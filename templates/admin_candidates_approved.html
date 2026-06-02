@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<div class="modern-page-wrapper">
+    <div class="container-fluid px-4 px-lg-5">
+        <div class="modern-header">
+            <a href="/admin/dashboard" class="modern-breadcrumb">
+                <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
+                Back to Dashboard
+            </a>
+            <h2 class="modern-title">
+                Approved Candidate Applications
+            </h2>
+            <p class="modern-subtitle">Comprehensive list of finalized candidates for current elections</p>
+        </div>
+
+        {% if applications %}
+        <div class="modern-table-container">
+            <table class="modern-table">
+                <thead>
+                    <tr>
+                        <th>
+                            <div class="icon-wrapper">
+                                <i data-lucide="user" style="width: 14px; height: 14px; color: #6366f1;"></i>
+                                Student Name
+                            </div>
+                        </th>
+                        <th>
+                            <div class="icon-wrapper">
+                                <i data-lucide="award" style="width: 14px; height: 14px; color: #a855f7;"></i>
+                                Election
+                            </div>
+                        </th>
+                        <th>
+                            <div class="icon-wrapper">
+                                <i data-lucide="calendar" style="width: 14px; height: 14px; color: #f59e0b;"></i>
+                                Applied At
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for app in applications %}
+                    <tr>
+                        <td>
+                            <div style="display: flex; align-items: center;">
+                                <div class="student-avatar">
+                                    {{ app.applicant_name[0] | upper }}
+                                </div>
+                                <span class="student-name">{{ app.applicant_name }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="election-pill">
+                                {{ app.election_title if app.election_title else 'N/A' }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="date-display">
+                                <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
+                                {{ app.applied_at }}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i data-lucide="clipboard-list" style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5;"></i>
+            <p>No approved candidate applications found.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+</script>
+{% endblock %}
