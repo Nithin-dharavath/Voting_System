@@ -1,38 +1,98 @@
 {% extends "base.html" %}
-{% block content %}
-<div class="container">
-    <h1 class="page-title">My Candidate Applications</h1>
+{% block title %}My Candidate Status - Voting System{% endblock %}
 
-    {% if applications %}
-    <div class="table-responsive">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Election</th>
-                    <th>Status</th>
-                    <th>Applied Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for app in applications %}
-                <tr>
-                    <td>{{ app.election_title }}</td>
-                    <td>
-                        <span class="badge {% if app.approval_status == 'APPROVED' %}badge-success{% elif app.approval_status == 'REJECTED' %}badge-danger{% else %}badge-warning{% endif %}">
-                            {{ app.approval_status }}
-                        </span>
-                    </td>
-                    <td>{{ app.applied_at }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+{% block content %}
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<div class="modern-page-wrapper">
+    <div class="container-fluid px-4 px-lg-5">
+        <div class="modern-header">
+            <a href="/student/dashboard" class="modern-breadcrumb">
+                <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
+                Back to Dashboard
+            </a>
+            <h2 class="modern-title">My Candidate Applications</h2>
+            <p class="modern-subtitle">Track the approval status of your candidacy for various elections.</p>
+        </div>
+
+        {% if applications %}
+        <div class="modern-table-container">
+            <table class="modern-table">
+                <thead>
+                    <tr style="background: linear-gradient(to right, #fdf2f8, #f5f3ff);">
+                        <th>
+                            <div class="icon-wrapper" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                                <i data-lucide="award" style="width: 14px; height: 14px; color: #a855f7;"></i>
+                                Election
+                            </div>
+                        </th>
+                        <th>
+                            <div class="icon-wrapper" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                                <i data-lucide="info" style="width: 14px; height: 14px; color: #3b82f6;"></i>
+                                Status
+                            </div>
+                        </th>
+                        <th>
+                            <div class="icon-wrapper" style="display: inline-flex; align-items: center; gap: 0.5rem;">
+                                <i data-lucide="calendar" style="width: 14px; height: 14px; color: #f59e0b;"></i>
+                                Applied Date
+                            </div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for app in applications %}
+                    <tr>
+                        <td>
+                            <span class="election-pill" style="display: inline-block; padding: 0.25rem 0.75rem; background: #eef2ff; color: #4f46e5; border-radius: 9999px; font-size: 0.75rem; font-weight: 600;">
+                                {{ app.election_title }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if app.approval_status == 'APPROVED' %}
+                            <div style="display: inline-flex; align-items: center; gap: 0.4rem; color: #059669; font-weight: 600; font-size: 0.875rem;">
+                                <i data-lucide="check-circle" style="width: 16px; height: 16px;"></i>
+                                Approved
+                            </div>
+                            {% elif app.approval_status == 'REJECTED' %}
+                            <div style="display: inline-flex; align-items: center; gap: 0.4rem; color: #dc2626; font-weight: 600; font-size: 0.875rem;">
+                                <i data-lucide="x-circle" style="width: 16px; height: 16px;"></i>
+                                Rejected
+                            </div>
+                            {% else %}
+                            <div style="display: inline-flex; align-items: center; gap: 0.4rem; color: #d97706; font-weight: 600; font-size: 0.875rem;">
+                                <i data-lucide="clock" style="width: 16px; height: 16px;"></i>
+                                Pending
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="date-display" style="display: inline-flex; align-items: center; gap: 0.4rem; color: #94a3b8; font-size: 0.875rem;">
+                                <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
+                                {{ app.applied_at }}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding: 5rem 0; text-align: center; color: #94a3b8;">
+            <i data-lucide="clipboard-list" style="width: 64px; height: 64px; margin-bottom: 1.5rem; opacity: 0.4;"></i>
+            <p style="font-size: 1.125rem; margin-bottom: 2rem;">You haven't applied as a candidate for any elections yet.</p>
+            <a href="/student/elections" class="btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 2rem; background: var(--primary-color); color: white; text-decoration: none; border-radius: 0.75rem; font-weight: 600; font-size: 0.875rem; transition: all 0.2s;">
+                <i data-lucide="plus-circle" style="width: 16px; height: 16px;"></i>
+                View Upcoming Elections
+            </a>
+        </div>
+        {% endif %}
     </div>
-    {% else %}
-    <div class="empty-state">
-        <p>You haven't applied as a candidate for any elections yet.</p>
-        <a href="/student/elections" class="btn-primary">View Upcoming Elections</a>
-    </div>
-    {% endif %}
 </div>
+
+<script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+</script>
 {% endblock %}

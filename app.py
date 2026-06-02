@@ -666,34 +666,87 @@ async def delete_election(request: Request, id: int, user = Depends(admin_guard)
         return RedirectResponse(url="/admin/elections?error=internal", status_code=303)
 
 
-@app.get("/admin/candidates/pending", response_class=HTMLResponse)
-async def admin_candidates_pending(request: Request, user = Depends(admin_guard)):
+@app.get("/admin/candidates", response_class=HTMLResponse)
+async def admin_candidates_list(
+    request: Request,
+    status: str = "PENDING",
+    sort: str = "date",
+    order: str = "ASC",
+    category: Optional[str] = None,
+    user = Depends(admin_guard)
+):
+    status = status.upper()
+    if status not in ["PENDING", "APPROVED", "REJECTED"]:
+        status = "PENDING"
+
+    order = order.upper()
+    if order not in ["ASC", "DESC"]:
+        order = "ASC"
+
+    sort_mapping = {
+        "date": "ca.applied_at",
+        "name": "u.full_name",
+        "election": "e.title"
+    }
+    sort_field = sort_mapping.get(sort, "ca.applied_at")
+
     try:
         with get_db_cursor() as cursor:
-            query = """
-            SELECT ca.*, u.full_name as applicant_name, e.title as election_title
+            # Fetch all departments for the filter dropdown
+            cursor.execute("SELECT DISTINCT department FROM users WHERE department IS NOT NULL")
+            departments = [row['department'] for row in cursor.fetchall()]
+
+            query = f"""
+            SELECT ca.*, u.full_name as applicant_name, u.department, e.title as election_title
             FROM candidate_applications ca
             JOIN users u ON ca.user_id = u.user_id
             JOIN elections e ON ca.election_id = e.id
-            WHERE ca.approval_status = 'PENDING'
-            ORDER BY ca.applied_at ASC
+            WHERE ca.approval_status = %s
             """
-            cursor.execute(query)
-            pending_apps = cursor.fetchall()
-            for app in pending_apps:
+            params = [status]
+
+            if category:
+                query += " AND u.department = %s"
+                params.append(category)
+
+            query += f" ORDER BY {sort_field} {order}"
+
+            cursor.execute(query, tuple(params))
+            applications = cursor.fetchall()
+            for app in applications:
                 app['applied_at'] = format_datetime_simple(app['applied_at'])
     except Exception:
-        logger.exception("Failed to fetch pending candidates")
-        return RedirectResponse(url="/admin/candidates/pending?error=internal", status_code=303)
+        logger.exception(f"Failed to fetch {status} candidates")
+        return RedirectResponse(url=f"/admin/candidates?status={status}&error=internal", status_code=303)
 
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
-        "admin_candidates_pending.html",
-        {"request": request, "applications": pending_apps, "user": user, "csrf_token": csrf_token}
+        "admin_candidates_list.html",
+        {
+            "request": request,
+            "applications": applications,
+            "user": user,
+            "csrf_token": csrf_token,
+            "current_status": status,
+            "departments": departments,
+            "current_category": category,
+            "current_sort": sort,
+            "current_order": order
+        }
     )
     response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
     return response
+
+@app.get("/admin/candidates/pending", response_class=HTMLResponse)
+async def admin_candidates_pending_redirect():
+    return RedirectResponse(url="/admin/candidates?status=PENDING", status_code=302)
+
+
+@app.get("/admin/candidates/approved", response_class=HTMLResponse)
+async def admin_candidates_approved_redirect(user = Depends(admin_guard)):
+    return RedirectResponse(url="/admin/candidates?status=APPROVED", status_code=302)
+
 
 
 @app.post("/admin/candidates/{id}/{action}")
@@ -713,10 +766,10 @@ async def update_candidate_status(
         with get_db_cursor() as cursor:
             query = "UPDATE candidate_applications SET approval_status = %s, reviewed_by = %s WHERE id = %s"
             cursor.execute(query, (status, user['user_id'], id))
-        return RedirectResponse(url="/admin/candidates/pending", status_code=303)
+        return RedirectResponse(url="/admin/candidates", status_code=303)
     except Exception as e:
         logger.exception(f"Failed to {action} candidate")
-        return RedirectResponse(url="/admin/candidates/pending?error=internal", status_code=303)
+        return RedirectResponse(url="/admin/candidates?error=internal", status_code=303)
 
 
 @app.get("/admin/elections/{id}/candidates", response_class=HTMLResponse)
