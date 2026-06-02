@@ -1,28 +1,65 @@
 {% extends "base.html" %}
+{% block title %}Apply as Candidate - Voting System{% endblock %}
+
 {% block content %}
-<div class="container">
-    <h1>Apply as Candidate</h1>
-    <div class="card">
-        <div class="card-header">
-            <h3>Election: {{ election.title }}</h3>
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<div class="modern-page-wrapper">
+    <div class="container-fluid px-4 px-lg-5">
+        <div class="modern-header">
+            <a href="/student/elections" class="modern-breadcrumb">
+                <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
+                Back to Elections
+            </a>
+            <h2 class="modern-title">Apply as Candidate</h2>
+            <p class="modern-subtitle">Submit your vision and goals for the {{ election.title }} election.</p>
         </div>
-        <div class="card-body">
-            <form action="/candidates/apply" method="POST">
-                <input type="hidden" name="election_id" value="{{ election.id }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-                <div class="form-group">
-                    <label for="manifesto">Candidate Manifesto</label>
-                    <p class="text-muted">Describe your goals, vision, and why students should vote for you.</p>
-                    <textarea id="manifesto" name="manifesto" class="form-control" rows="10" required placeholder="Enter your manifesto here..."></textarea>
+        <div class="page-card" style="max-width: 800px; margin: 0 auto; background: white; border-radius: 1.25rem; border: 1px solid #e2e8f0; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05);">
+            <div style="padding: 2rem;">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--border-color);">
+                    <div class="student-avatar" style="width: 48px; height: 48px; font-size: 1.25rem;">
+                        {{ user.full_name[0] | upper if user.full_name else 'S' }}
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.25rem; color: var(--primary-color);">Candidacy Application</h3>
+                        <p style="margin: 0; font-size: 0.875rem; color: #64748b;">Election: {{ election.title }}</p>
+                    </div>
                 </div>
 
-                <div class="form-actions">
-                    <button type="submit" class="btn-primary">Submit Application</button>
-                    <a href="/student/elections" class="btn-secondary">Cancel</a>
-                </div>
-            </form>
+                <form action="/candidates/apply" method="POST">
+                    <input type="hidden" name="election_id" value="{{ election.id }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                    <div class="form-group">
+                        <label for="manifesto" style="display: flex; align-items: center; gap: 0.5rem; font-weight: 600; color: var(--text-color); margin-bottom: 0.75rem;">
+                            <i data-lucide="file-text" style="width: 16px; height: 16px; color: var(--accent-color);"></i>
+                            Candidate Manifesto
+                        </label>
+                        <p style="font-size: 0.875rem; color: #64748b; margin-bottom: 1rem;">
+                            Describe your goals, vision, and why students should vote for you. Your manifesto will be visible to all voters if approved.
+                        </p>
+                        <textarea id="manifesto" name="manifesto" rows="12"
+                            style="width: 100%; padding: 1rem; border: 1px solid var(--border-color); border-radius: 0.75rem; font-family: inherit; font-size: 0.9375rem; transition: all 0.2s; box-sizing: border-box; resize: vertical;"
+                            placeholder="I believe our campus needs..." required></textarea>
+                    </div>
+
+                    <div class="action-group" style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2.5rem;">
+                        <a href="/student/elections" class="btn-secondary" style="padding: 0.75rem 1.5rem; font-weight: 600; font-size: 0.875rem; text-decoration: none; color: var(--text-color); border: 1px solid var(--border-color); border-radius: 0.75rem; background: #f8fafc; transition: all 0.2s;">Cancel</a>
+                        <button type="submit" class="btn-primary" style="width: auto; padding: 0.75rem 2rem; background: var(--primary-color); color: white; border: none; border-radius: 0.75rem; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.5rem;">
+                            <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+                            Submit Application
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>
+
+<script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+</script>
 {% endblock %}

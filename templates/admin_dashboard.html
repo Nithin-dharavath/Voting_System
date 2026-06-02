@@ -14,7 +14,8 @@
                 <h3>Management</h3>
                 <ul class="sidebar-nav">
                     <li><a href="/admin/elections" class="active">Elections</a></li>
-                    <li><a href="/admin/candidates/pending">Candidates</a></li>
+                    <li><a href="/admin/candidates">Candidates</a></li>
+                    <li><a href="/admin/candidates/approved">Approved Candidates</a></li>
                     <li><a href="/admin/results">Results</a></li>
                     <li><a href="/admin/audit">Audit Logs</a></li>
                 </ul>
@@ -32,7 +33,7 @@
                         <div class="value">{{ stats.active_elections }}</div>>
                         <p style="font-size: 0.75rem; color: #64748b;">Currently ongoing</p>
                     </div>
-                    <a href="/admin/candidates/pending" class="stat-card" style="text-decoration: none; color: inherit;">
+                    <a href="/admin/candidates" class="stat-card" style="text-decoration: none; color: inherit;">
                         <h3>Pending Apps</h3>
                         <div class="value">{{ stats.pending_apps }}</div>>
                         <p style="font-size: 0.75rem; color: #64748b;">Candidates to review</p>

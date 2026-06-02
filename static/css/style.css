@@ -741,8 +741,75 @@ button:hover {
     color: #ef4444;
 }
 
+/* ... existing styles ... */
+
 .empty-state {
     padding: 5rem 0;
     text-align: center;
     color: #94a3b8;
+}
+
+/* Status Tabs Navigation */
+.status-tabs-container {
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: center;
+}
+
+.status-tabs {
+    display: inline-flex;
+    background: white;
+    padding: 0.5rem;
+    border-radius: 1rem;
+    border: 1px solid var(--border-color);
+    gap: 0.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.tab-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    text-decoration: none;
+    color: #64748b;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border-radius: 0.75rem;
+    transition: all 0.2s;
+}
+
+.tab-item:hover {
+    color: var(--primary-color);
+    background: #f8fafc;
+}
+
+.tab-item.active {
+    background: var(--primary-color);
+    color: white;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+}
+
+/* Responsive Table */
+.modern-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+    .modern-table {
+        font-size: 0.8125rem;
+    }
+    .modern-table td, .modern-table th {
+        padding: 0.75rem;
+    }
+    .action-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .student-avatar {
+        width: 32px;
+        height: 32px;
+        margin-right: 0.5rem;
+    }
 }
