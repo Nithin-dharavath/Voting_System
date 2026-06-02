@@ -13,6 +13,7 @@
             <div class="nav-links">
                 {% if request.state.user %}
                     <a href="{{ '/admin/dashboard' if request.state.user.role == 'ADMIN' else '/student/dashboard' }}">Dashboard</a>
+                    <a href="/profile">Profile</a>
                     <a href="/auth/logout" class="btn-logout">Logout</a>
                 {% else %}
                     <a href="/login">Login</a>
