@@ -16,7 +16,8 @@ def seed_database():
         "password": "adminpassword123",
         "department": "Administration",
         "academic_year": "2025-26",
-        "role": "ADMIN"
+        "role": "ADMIN",
+        "profile_picture": "/uploads/profiles/admin_default.jpg"
     }
 
     student_users = [
@@ -26,7 +27,8 @@ def seed_database():
             "password": "studentpassword123",
             "department": "Computer Science",
             "academic_year": "2025-26",
-            "role": "STUDENT"
+            "role": "STUDENT",
+            "profile_picture": "/uploads/profiles/alice.jpg"
         },
         {
             "full_name": "Bob Student",
@@ -34,7 +36,8 @@ def seed_database():
             "password": "studentpassword123",
             "department": "Electrical Engineering",
             "academic_year": "2025-26",
-            "role": "STUDENT"
+            "role": "STUDENT",
+            "profile_picture": None
         },
         {
             "full_name": "Charlie Student",
@@ -42,7 +45,8 @@ def seed_database():
             "password": "studentpassword123",
             "department": "Mathematics",
             "academic_year": "2025-26",
-            "role": "STUDENT"
+            "role": "STUDENT",
+            "profile_picture": "/uploads/profiles/charlie.jpg"
         },
         {
             "full_name": "Diana Student",
@@ -50,7 +54,8 @@ def seed_database():
             "password": "studentpassword123",
             "department": "Physics",
             "academic_year": "2025-26",
-            "role": "STUDENT"
+            "role": "STUDENT",
+            "profile_picture": None
         }
     ]
 
@@ -112,14 +117,15 @@ def seed_database():
                 row = cursor.fetchone()
                 if not row:
                     hashed_pw = generate_password_hash(admin_user['password'])
-                    query = "INSERT INTO users (full_name, email, password_hash, department, academic_year, role) VALUES (%s, %s, %s, %s, %s, %s)"
+                    query = "INSERT INTO users (full_name, email, password_hash, department, academic_year, role, profile_picture) VALUES (%s, %s, %s, %s, %s, %s, %s)"
                     cursor.execute(query, (
                         admin_user['full_name'],
                         admin_user['email'],
                         hashed_pw,
                         admin_user['department'],
                         admin_user['academic_year'],
-                        admin_user['role']
+                        admin_user['role'],
+                        admin_user['profile_picture']
                     ))
                     admin_id = cursor.lastrowid
                 else:
@@ -137,14 +143,15 @@ def seed_database():
                     row = cursor.fetchone()
                     if not row:
                         hashed_pw = generate_password_hash(student['password'])
-                        query = "INSERT INTO users (full_name, email, password_hash, department, academic_year, role) VALUES (%s, %s, %s, %s, %s, %s)"
+                        query = "INSERT INTO users (full_name, email, password_hash, department, academic_year, role, profile_picture) VALUES (%s, %s, %s, %s, %s, %s, %s)"
                         cursor.execute(query, (
                             student['full_name'],
                             student['email'],
                             hashed_pw,
                             student['department'],
                             student['academic_year'],
-                            student['role']
+                            student['role'],
+                            student['profile_picture']
                         ))
                         student_ids.append(cursor.lastrowid)
                     else:

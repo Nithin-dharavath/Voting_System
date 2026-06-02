@@ -841,8 +841,118 @@ async def admin_election_candidates(request: Request, id: int, user = Depends(ad
     return response
 
 
-@app.get("/auth/me")
-async def get_me(request: Request, user = Depends(get_current_user)):
+def save_profile_picture(user_id: int, file: UploadFile) -> Optional[str]:
+    allowed_extensions = {'.jpg', '.jpeg', '.png'}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_extensions:
+        return None
+
+    filename = f"profile_{user_id}_{uuid.uuid4().hex[:8]}{ext}"
+    file_path = os.path.join("uploads", "profiles", filename)
+
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        return f"/uploads/profiles/{filename}"
+    except Exception as e:
+        logger.error(f"Error saving profile picture for user {user_id}: {e}")
+        return None
+
+@app.get("/profile", response_class=HTMLResponse)
+async def profile_page(request: Request, user = Depends(get_current_user)):
     if not user:
-        return {"authenticated": False}
-    return {"authenticated": True, "user": user}
+        return RedirectResponse(url="/login", status_code=302)
+
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT full_name, email, department, academic_year, profile_picture FROM users WHERE user_id = %s", (user['user_id'],))
+        user_data = cursor.fetchone()
+
+    if not user_data:
+        return RedirectResponse(url="/login", status_code=302)
+
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "profile.html",
+        {"request": request, "user": user_data, "csrf_token": csrf_token}
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    return response
+
+@app.post("/profile/update")
+async def update_profile(
+    request: Request,
+    full_name: str = Form(...),
+    department: str = Form(...),
+    academic_year: str = Form(...),
+    profile_pic: Optional[UploadFile] = File(None),
+    user = Depends(get_current_user),
+    csrf_token = Depends(verify_csrf)
+):
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        profile_path = None
+        if profile_pic:
+            profile_path = save_profile_picture(user['user_id'], profile_pic)
+
+        with get_db_cursor() as cursor:
+            if profile_path:
+                query = "UPDATE users SET full_name = %s, department = %s, academic_year = %s, profile_picture = %s WHERE user_id = %s"
+                cursor.execute(query, (full_name, department, academic_year, profile_path, user['user_id']))
+            else:
+                query = "UPDATE users SET full_name = %s, department = %s, academic_year = %s WHERE user_id = %s"
+                cursor.execute(query, (full_name, department, academic_year, user['user_id']))
+
+        return RedirectResponse(url="/profile?success=updated", status_code=303)
+    except Exception as e:
+        logger.exception("Failed to update user profile")
+        return RedirectResponse(url="/profile?error=internal", status_code=303)
+
+@app.get("/admin/users/{id}/profile", response_class=HTMLResponse)
+async def admin_user_profile_page(request: Request, id: int, user = Depends(admin_guard)):
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT user_id, full_name, email, department, academic_year, profile_picture, role FROM users WHERE user_id = %s", (id,))
+        target_user = cursor.fetchone()
+
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "admin_user_profile.html",
+        {"request": request, "target_user": target_user, "csrf_token": csrf_token}
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    return response
+
+@app.post("/admin/users/{id}/update")
+async def admin_update_user_profile(
+    request: Request,
+    id: int,
+    full_name: str = Form(...),
+    department: str = Form(...),
+    academic_year: str = Form(...),
+    profile_pic: Optional[UploadFile] = File(None),
+    user = Depends(admin_guard),
+    csrf_token = Depends(verify_csrf)
+):
+    try:
+        profile_path = None
+        if profile_pic:
+            profile_path = save_profile_picture(id, profile_pic)
+
+        with get_db_cursor() as cursor:
+            if profile_path:
+                query = "UPDATE users SET full_name = %s, department = %s, academic_year = %s, profile_picture = %s WHERE user_id = %s"
+                cursor.execute(query, (full_name, department, academic_year, profile_path, id))
+            else:
+                query = "UPDATE users SET full_name = %s, department = %s, academic_year = %s WHERE user_id = %s"
+                cursor.execute(query, (full_name, department, academic_year, id))
+
+        return RedirectResponse(url=f"/admin/users/{id}/profile?success=updated", status_code=303)
+    except Exception as e:
+        logger.exception("Admin failed to update user profile")
+        return RedirectResponse(url=f"/admin/users/{id}/profile?error=internal", status_code=303)

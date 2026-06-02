@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}User Profile Management | Online Voting System{% endblock %}
+
+{% block content %}
+<div class="modern-page-wrapper">
+    <div class="modern-header">
+        <a href="/admin/dashboard" class="modern-breadcrumb">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+            Admin Dashboard
+        </a>
+        <h1 class="modern-title">User Profile Management</h1>
+        <p class="modern-subtitle">Review and manage details for <strong style="color: var(--primary-color);">{{ target_user.full_name }}</strong></p>
+    </div>
+
+    {% if request.query_params.get("success") == "updated" %}
+    <div class="alert alert-success">User profile updated successfully!</div>
+    {% elif request.query_params.get("error") == "internal" %}
+    <div class="alert alert-error">An internal error occurred. Please try again.</div>
+    {% endif %}
+
+    <div style="display: grid; grid-template-columns: 350px 1fr; gap: 2rem; align-items: start; margin-top: 2rem;">
+        <!-- Profile Overview Card -->
+        <div class="page-card" style="text-align: center; display: flex; flex-direction: column; align-items: center;">
+            <div style="position: relative; width: 180px; height: 180px; margin-bottom: 1.5rem;">
+                {% if target_user.profile_picture %}
+                    <img src="{{ target_user.profile_picture }}" alt="User Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 6px solid white; box-shadow: 0 10px 20px rgba(0,0,0,0.1);">
+                {% else %}
+                    <div class="student-avatar" style="width: 180px; height: 180px; font-size: 4rem;">{{ target_user.full_name[0] if target_user.full_name else 'U' }}</div>
+                {% endif %}
+            </div>
+
+            <h2 style="margin: 0 0 0.5rem 0; color: var(--primary-color); font-size: 1.5rem;">{{ target_user.full_name }}</h2>
+            <div class="election-pill" style="margin-bottom: 1.5rem;">{{ target_user.role }}</div>
+
+            <div style="text-align: left; width: 100%; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                <div style="margin-bottom: 1rem;">
+                    <label style="color: var(--color-admin-slate); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Department</label>
+                    <div style="font-weight: 600; color: var(--text-color);">{{ target_user.department }}</div>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <label style="color: var(--color-admin-slate); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Academic Year</label>
+                    <div style="font-weight: 600; color: var(--text-color);">{{ target_user.academic_year }}</div>
+                </div>
+                <div style="margin-bottom: 0;">
+                    <label style="color: var(--color-admin-slate); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">User ID</label>
+                    <div style="font-weight: 600; color: var(--text-color);">{{ target_user.user_id }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Form Card -->
+        <div class="page-card">
+            <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 1.5rem; color: var(--primary-color); display: flex; align-items: center; gap: 0.5rem;">
+                <span style="width: 8px; height: 8px; background-color: var(--accent-color); border-radius: 50%;"></span>
+                Update User Information
+            </h2>
+
+            <form action="/admin/users/{{ target_user.user_id }}/update" method="POST" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                <div class="form-group">
+                    <label for="full_name">Full Name</label>
+                    <input type="text" id="full_name" name="full_name" value="{{ target_user.full_name }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="department">Department</label>
+                    <input type="text" id="department" name="department" value="{{ target_user.department }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="academic_year">Academic Year</label>
+                    <input type="text" id="academic_year" name="academic_year" value="{{ target_user.academic_year }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="profile_pic">Change Profile Picture</label>
+                    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem;">
+                        {% if target_user.profile_picture %}
+                            <img src="{{ target_user.profile_picture }}" alt="Current" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-color);">
+                        {% else %}
+                            <div class="student-avatar" style="width: 50px; height: 50px;">{{ target_user.full_name[0] if target_user.full_name else 'U' }}</div>
+                        {% endif %}
+                        <span style="font-size: 0.875rem; color: var(--color-admin-slate);">Current profile image</span>
+                    </div>
+                    <input type="file" id="profile_pic" name="profile_pic" accept=".jpg, .jpeg, .png" style="padding: 0.5rem; border: 1px dashed var(--border-color); background: var(--bg-light);">
+                </div>
+
+                <div class="action-buttons" style="justify-content: flex-start; margin-top: 1rem;">
+                    <button type="submit" class="btn-primary" style="width: auto; padding: 0.75rem 2rem; background: linear-gradient(to right, var(--primary-color), var(--accent-color));">
+                        Update User Profile
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .modern-page-wrapper {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        min-height: 90vh;
+        padding: 3rem 1rem;
+        border-radius: 1.5rem;
+    }
+    .page-card {
+        background: white;
+        padding: 2.5rem;
+        border-radius: 1.5rem;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+    }
+    @media (max-width: 992px) {
+        div[style*="grid-template-columns: 350px 1fr"] {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
