@@ -3,14 +3,22 @@
 {% block title %}{{ election.title }} - Online Voting System{% endblock %}
 
 {% block content %}
-<div class="page-card">
+<div class="page-card election-detail-card">
     <div class="dashboard-header">
-        <a href="/student/elections" class="back-link">← Back to Elections</a>
+        <a href="/student/elections" class="back-link">&larr; Back to Elections</a>
         <h1>{{ election.title }}</h1>
         <span class="status-badge status-{{ election.status.lower() }}">
             {{ election.status }}
         </span>
     </div>
+
+    {% if success_message %}
+    <div class="alert alert-success">{{ success_message }}</div>
+    {% endif %}
+
+    {% if error_message %}
+    <div class="alert alert-error">{{ error_message }}</div>
+    {% endif %}
 
     <div class="election-details">
         <div class="detail-item">
@@ -29,11 +37,20 @@
             </div>
         </div>
 
+        {% if election.status == 'ACTIVE' and has_voted %}
+        <div class="vote-confirmation-card">
+            <p class="vote-confirmation-title">Vote submitted</p>
+            <p class="vote-confirmation-text">Your vote for this election has already been recorded.</p>
+        </div>
+        {% endif %}
+
         <div class="action-group centered">
             {% if election.status == 'UPCOMING' and not has_applied %}
                 <a href="/student/elections/{{ election.id }}/apply" class="btn-primary">Apply as Candidate</a>
-            {% elif election.status == 'ACTIVE' %}
+            {% elif election.status == 'ACTIVE' and not has_voted %}
                 <a href="/student/elections/{{ election.id }}/vote" class="btn-primary">Vote Now</a>
+            {% elif election.status == 'ACTIVE' and has_voted %}
+                <span class="btn-secondary action-static">Vote already recorded</span>
             {% elif election.status == 'ENDED' %}
                 <a href="/student/results/{{ election.id }}" class="btn-primary">View Results</a>
             {% endif %}

@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from werkzeug.security import generate_password_hash, check_password_hash
 from database.connection import get_db_cursor
+import mysql.connector
 import jwt
 import os
 import secrets
@@ -130,6 +131,62 @@ def has_user_applied(user_id: int, election_id: int) -> bool:
     with get_db_cursor() as cursor:
         cursor.execute("SELECT id FROM candidate_applications WHERE user_id = %s AND election_id = %s", (user_id, election_id))
         return cursor.fetchone() is not None
+
+def has_user_voted(user_id: int, election_id: int) -> bool:
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            "SELECT 1 FROM votes WHERE voter_id = %s AND election_id = %s LIMIT 1",
+            (user_id, election_id)
+        )
+        return cursor.fetchone() is not None
+
+def get_approved_candidates_for_election(election_id: int):
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                ca.id,
+                ca.user_id,
+                ca.election_id,
+                ca.manifesto,
+                u.full_name AS candidate_name,
+                u.department,
+                u.academic_year
+            FROM candidate_applications ca
+            JOIN users u ON ca.user_id = u.user_id
+            WHERE ca.election_id = %s AND ca.approval_status = 'APPROVED'
+            ORDER BY u.full_name ASC
+            """,
+            (election_id,)
+        )
+        return cursor.fetchall()
+
+def get_approved_candidate_for_vote(candidate_application_id: int, election_id: int):
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, user_id, election_id, approval_status
+            FROM candidate_applications
+            WHERE id = %s AND election_id = %s AND approval_status = 'APPROVED'
+            LIMIT 1
+            """,
+            (candidate_application_id, election_id)
+        )
+        return cursor.fetchone()
+
+def mark_voting_session_completed(user_id: int, election_id: int):
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE voting_sessions
+                SET completed = 1
+                WHERE user_id = %s AND election_id = %s AND completed = 0
+                """,
+                (user_id, election_id)
+            )
+    except Exception:
+        logger.info("Voting sessions table was not updated for election %s and user %s", election_id, user_id)
 
 async def get_current_user(request: Request):
     token = request.cookies.get(COOKIE_NAME)
@@ -400,11 +457,36 @@ async def student_election_detail(request: Request, id: int, user = Depends(stud
         return RedirectResponse(url="/student/elections", status_code=302)
 
     has_applied = has_user_applied(user['user_id'], id)
+    has_voted = has_user_voted(user['user_id'], id)
+    success_message = None
+    error_message = None
+    success_key = request.query_params.get("success")
+    error_key = request.query_params.get("error")
+
+    if success_key == "voted":
+        success_message = "Your vote has been recorded."
+    elif success_key == "already_voted":
+        success_message = "You have already voted in this election."
+
+    if error_key == "already_voted":
+        error_message = "You have already voted in this election."
+    elif error_key == "invalid_candidate":
+        error_message = "Please select an approved candidate from this election."
+    elif error_key == "inactive":
+        error_message = "Voting is only available while the election is active."
 
     return templates.TemplateResponse(
         request,
         "student_election_detail.html",
-        {"request": request, "election": election, "user": user, "has_applied": has_applied}
+        {
+            "request": request,
+            "election": election,
+            "user": user,
+            "has_applied": has_applied,
+            "has_voted": has_voted,
+            "success_message": success_message,
+            "error_message": error_message
+        }
     )
 
 @app.get("/student/elections/{id}/apply", response_class=HTMLResponse)
@@ -427,6 +509,82 @@ async def student_election_apply_page(request: Request, id: int, user = Depends(
     )
     response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
     return response
+
+@app.get("/student/elections/{id}/vote", response_class=HTMLResponse)
+async def student_election_vote_page(request: Request, id: int, user = Depends(student_guard)):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/student/elections", status_code=302)
+
+    if election["status"] != "ACTIVE":
+        return RedirectResponse(url=f"/student/elections/{id}?error=inactive", status_code=302)
+
+    if has_user_voted(user["user_id"], id):
+        return RedirectResponse(url=f"/student/elections/{id}?success=already_voted", status_code=302)
+
+    approved_candidates = get_approved_candidates_for_election(id)
+    error_key = request.query_params.get("error")
+    error_message = None
+    if error_key == "invalid_candidate":
+        error_message = "Please select an approved candidate from this election."
+    elif error_key == "internal":
+        error_message = "An internal error occurred. Please try again."
+
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "student_election_vote.html",
+        {
+            "request": request,
+            "election": election,
+            "user": user,
+            "approved_candidates": approved_candidates,
+            "csrf_token": csrf_token,
+            "error_message": error_message
+        }
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    return response
+
+@app.post("/student/elections/{id}/vote")
+async def submit_student_vote(
+    request: Request,
+    id: int,
+    candidate_application_id: int = Form(...),
+    user = Depends(student_guard),
+    csrf_token = Depends(verify_csrf)
+):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/student/elections", status_code=302)
+
+    if election["status"] != "ACTIVE":
+        return RedirectResponse(url=f"/student/elections/{id}?error=inactive", status_code=302)
+
+    if has_user_voted(user["user_id"], id):
+        return RedirectResponse(url=f"/student/elections/{id}?success=already_voted", status_code=303)
+
+    candidate = get_approved_candidate_for_vote(candidate_application_id, id)
+    if not candidate:
+        return RedirectResponse(url=f"/student/elections/{id}/vote?error=invalid_candidate", status_code=303)
+
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO votes (user_id, election_id, candidate_application_id, voted_at)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (user["user_id"], id, candidate_application_id, datetime.now(timezone.utc))
+            )
+    except mysql.connector.IntegrityError:
+        return RedirectResponse(url=f"/student/elections/{id}?success=already_voted", status_code=303)
+    except Exception:
+        logger.exception("Failed to record vote")
+        return RedirectResponse(url=f"/student/elections/{id}/vote?error=internal", status_code=303)
+
+    mark_voting_session_completed(user["user_id"], id)
+    return RedirectResponse(url=f"/student/elections/{id}?success=voted", status_code=303)
 
 @app.post("/candidates/apply")
 async def apply_as_candidate(
