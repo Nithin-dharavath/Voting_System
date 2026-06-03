@@ -32,7 +32,7 @@
 
     .profile-header {
         background: var(--gradient-header);
-        padding: 2.5rem 2rem;
+        padding: 2rem 2rem 1rem 2rem;
         position: relative;
         display: flex;
         align-items: center;
@@ -122,38 +122,35 @@
 
     .profile-meta-info {
         display: flex;
-        gap: 1.5rem;
-        font-size: 0.875rem;
-        color: var(--text-muted);
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 0.75rem;
     }
 
     .meta-item {
         display: flex;
         align-items: center;
-        gap: 0.4rem;
-    }
-
-    .edit-profile-btn {
-        position: absolute;
-        top: 1.5rem;
-        right: 1.5rem;
-        padding: 0.5rem 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid var(--border-color);
-        background: white;
-        color: var(--text-main);
-        font-size: 0.875rem;
-        font-weight: 500;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
         gap: 0.5rem;
-        transition: all 0.2s;
+        padding: 0.4rem 0.8rem;
+        background: white;
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-main);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        transition: all 0.2s ease;
     }
 
-    .edit-profile-btn:hover {
-        background: #f8fafc;
-        border-color: #cbd5e1;
+    .meta-item:hover {
+        border-color: var(--primary-color);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+
+    .meta-item svg {
+        color: var(--primary-color);
+        opacity: 0.8;
     }
 
     /* Tabs Styling */
@@ -447,11 +444,6 @@
         .profile-meta-info {
             justify-content: center;
         }
-        .edit-profile-btn {
-            position: static;
-            margin: 0 auto;
-            display: flex;
-        }
     }
 </style>
 
@@ -482,12 +474,8 @@
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 9-9 9s-9-3-9-9"/><path d="M3 10h18"/><path d="M12 10V3"/></svg>
                         {{ user.department if user.department else 'Computer Science' }}
                     </span>
-                </div>
-            </div>
-            <button class="edit-profile-btn" onclick="toggleEditMode()">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 6H3"/><path d="M17 21l-4-4 4-4"/><path d="M3 18h18"/></svg>
-                Edit Profile
-            </button>
+                </div}
+            </div
         </div>
 
         <div class="profile-tabs">
@@ -662,32 +650,4 @@
         </div>
     </div>
 </div>
-
-<script>
-    function switchTab(event, tabId) {
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-
-        event.currentTarget.classList.add('active');
-        document.getElementById(tabId).classList.add('active');
-    }
-
-    function toggleEditMode() {
-        const btn = document.querySelector('.edit-profile-btn');
-        const actions = document.getElementById('form-actions');
-        const isEditing = actions.style.display === 'flex';
-
-        if (isEditing) {
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 6H3"/><path d="M17 21l-4-4 4-4"/><path d="M3 18h18"/></svg> Edit Profile`;
-            actions.style.display = 'none';
-            document.querySelectorAll('.input-wrapper .info-box').forEach(box => box.style.display = 'flex');
-            document.querySelectorAll('.info-input').forEach(input => input.style.display = 'none');
-        } else {
-            btn.innerHTML = 'Cancel';
-            actions.style.display = 'flex';
-            document.querySelectorAll('.input-wrapper .info-box').forEach(box => box.style.display = 'none');
-            document.querySelectorAll('.info-input').forEach(input => input.style.display = 'block');
-        }
-    }
-</script>
 {% endblock %}

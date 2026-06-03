@@ -1,120 +1,27 @@
-# Online Voting System — Medium Database Design
+# Online Voting System — Database Design
 
-# 1. Database Overview
+## Overview
 
-Database Engine:
+* MySQL + InnoDB + utf8mb4
+* Secure, scalable, and transaction-safe design
 
-* MySQL
-* InnoDB
-* utf8mb4
+## Main Tables
 
-The schema is designed for:
-
-* normalized relationships
-* transaction safety
-* referential integrity
-* vote consistency
-* scalable query handling
-* maintainable backend workflows
-
----
-
-# 2. Core Database Principles
-
-## Referential Integrity
-
-Uses:
-
-* foreign keys
-* cascading rules
-* unique constraints
-
----
-
-## Transaction Safety
-
-Critical vote operations use:
-
-* ACID transactions
-* rollback support
-* atomic commits
-
----
-
-## Security
-
-Schema supports:
-
-* RBAC
-* session validation
-* vote uniqueness
-* audit verification
-
----
-
-# 3. Entity Relationships
-
-```text
-users
- ├── elections
- ├── candidate_applications
- ├── voting_sessions
- ├── votes
- └── vote_verifications
-
-elections
- ├── candidate_applications
- ├── voting_sessions
- ├── votes
- └── vote_verifications
-
-candidate_applications
- └── votes
-```
-
----
-
-# 4. users Table
-
-## Purpose
+### users
 
 Stores students and admins.
-
-## Core Fields
 
 * id
 * full_name
 * email
 * password_hash
+* role
 * department
 * academic_year
-* role
-* is_active
-* created_at
 
-## Business Rules
+### elections
 
-* email must be unique
-* only approved institutional domain allowed
-* admin accounts manually created
-* passwords stored as hashes only
-
-## Responsibilities
-
-* authentication
-* RBAC
-* profile management
-* election participation ownership
-
----
-
-# 5. elections Table
-
-## Purpose
-
-Stores election lifecycle data.
-
-## Core Fields
+Stores election details.
 
 * id
 * title
@@ -124,38 +31,9 @@ Stores election lifecycle data.
 * result_published
 * created_by
 
-## Responsibilities
+### candidate_applications
 
-* election scheduling
-* election activation
-* election closure
-* result publication control
-
-## Election States
-
-Derived dynamically:
-
-```text
-UPCOMING
-ACTIVE
-ENDED
-```
-
-Result visibility controlled by:
-
-```text
-result_published
-```
-
----
-
-# 6. candidate_applications Table
-
-## Purpose
-
-Stores candidate participation requests.
-
-## Core Fields
+Stores candidate requests.
 
 * id
 * user_id
@@ -163,38 +41,10 @@ Stores candidate participation requests.
 * manifesto
 * approval_status
 * reviewed_by
-* applied_at
 
-## Responsibilities
-
-* candidate application workflow
-* admin approval/rejection
-* manifesto storage
-* election participation tracking
-
-## Business Rules
-
-* one application per election
-* rejected candidates cannot reapply same election
-* approval required before visibility
-
-## Application States
-
-```text
-PENDING
-APPROVED
-REJECTED
-```
-
----
-
-# 7. voting_sessions Table
-
-## Purpose
+### voting_sessions
 
 Tracks temporary voting access.
-
-## Core Fields
 
 * student_id
 * election_id
@@ -202,219 +52,77 @@ Tracks temporary voting access.
 * expires_at
 * completed
 
-## Responsibilities
+### votes
 
-* prevent duplicate sessions
-* manage voting expiration
-* support controlled vote workflow
-* avoid partial vote persistence
-
-## Session Rules
-
-* no new session if election remaining time < 2 minutes
-* expired sessions automatically invalidated
-
----
-
-# 8. votes Table
-
-## Purpose
-
-Stores final committed votes.
-
-## Core Fields
+Stores final votes.
 
 * student_id
 * election_id
 * candidate_application_id
 * voted_at
 
-## Primary Key
+**Constraint:** One vote per student per election.
 
-```text
-(user_id, election_id)
-```
+### vote_verifications
 
-This enforces:
-
-```text
-one vote per student per election
-```
-
-## Responsibilities
-
-* final vote storage
-* vote counting
-* election result generation
-* vote integrity enforcement
-
-## Business Rules
-
-* vote stored only after successful verification
-* votes are immutable after commit
-* backend + DB both enforce uniqueness
-
----
-
-# 9. vote_verifications Table
-
-## Purpose
-
-Stores selfie/signature verification evidence.
-
-## Core Fields
+Stores verification evidence.
 
 * id
 * student_id
 * election_id
 * verification_type
 * file_path
-* uploaded_at
 
-## Verification Types
+## Core Features
 
-```text
-SELFIE
-SIGNATURE
-```
+* Foreign Keys
+* Unique Constraints
+* RBAC Support
+* Vote Uniqueness
+* Transaction Safety
+* Audit Verification
 
-## Responsibilities
-
-* audit evidence storage
-* verification linkage
-* verification tracking
-
-## Storage Strategy
-
-Files stored in:
+## Vote Workflow
 
 ```text
-/uploads/
-```
-
-Database stores only paths.
-
----
-
-# 10. Vote Transaction Workflow
-
-Critical transaction flow:
-
-```text
-1. Validate voting session
-2. Insert vote
-3. Insert verification
-4. Mark session completed
-5. Commit transaction
-```
+1. Validate Session
+2. Insert Vote
+3. Insert Verification
+4. Complete Session
+5. Commit Transaction
 
 If any step fails:
-
-```text
 ROLLBACK
 ```
 
-No partial vote persistence allowed.
-
----
-
-# 11. Indexing Strategy
-
-Recommended indexes:
-
-* election time lookup
-* candidate approval status
-* vote counting
-* verification lookup
-* user role filtering
-
-Optimized for:
-
-* fast result counting
-* efficient candidate retrieval
-* low-latency vote insertion
-
----
-
-# 12. Cascade Rules
-
-| Relationship                   | Delete Strategy |
-| ------------------------------ | --------------- |
-| users → votes                  | CASCADE         |
-| users → candidate_applications | CASCADE         |
-| elections → votes              | CASCADE         |
-| elections → sessions           | CASCADE         |
-| reviewed_by                    | SET NULL        |
-
----
-
-# 13. Upload Structure
+## Upload Structure
 
 ```text
 uploads/
-│
 ├── selfies/
 ├── signatures/
 ├── manifestos/
 └── profiles/
 ```
 
----
+## Benefits
 
-# 14. Database Characteristics
+* Normalized Database
+* Secure Architecture
+* Transaction-Safe
+* Scalable Design
+* Maintainable Structure
+* Future Expansion Ready
 
-| Property                 | Status |
-| ------------------------ | ------ |
-| Normalized               | ✅      |
-| Transaction-safe         | ✅      |
-| Referential integrity    | ✅      |
-| RBAC compatible          | ✅      |
-| Vote uniqueness enforced | ✅      |
-| Session-managed          | ✅      |
-| Maintainable             | ✅      |
-| Scalable                 | ✅      |
-| AI-agent readable        | ✅      |
+## Future Enhancements
 
----
+* OTP Verification
+* Notifications
+* Audit Logs
+* Election Analytics
+* Biometric Verification
+* Mobile Application Support
 
-# 15. Future Expansion Compatibility
+## Goal
 
-Supports future additions:
-
-* OTP/email verification
-* notifications
-* audit logging
-* election analytics
-* biometric verification
-* election categories
-* multi-college support
-* mobile applications
-
-without major redesign.
-
----
-
-# 16. Engineering Philosophy
-
-The database architecture intentionally prioritizes:
-
-* clean relational modeling
-* practical security
-* transaction consistency
-* scalable structure
-* maintainable workflows
-
-while avoiding:
-
-* unnecessary distributed complexity
-* overengineered schemas
-* premature optimization
-* excessive infrastructure abstraction
-
-The result is a realistic institutional-grade database architecture suitable for:
-
-* production-style backend development
-* AI-assisted coding workflows
-* scalable future enhancement
-* educational deployment
-* portfolio-level system design
+Build a secure and reliable online voting system with strong vote integrity, efficient management, and future scalability.
