@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Cast Vote - {{ election.title }}{% endblock %}
+
+{% block content %}
+<div class="vote-page-shell">
+    <div class="vote-page-header">
+        <a href="/student/elections/{{ election.id }}" class="back-link">&larr; Back to Election</a>
+        <div class="vote-hero">
+            <div>
+                <p class="vote-eyebrow">Active Election</p>
+                <h1>{{ election.title }}</h1>
+                <p class="vote-subtitle">
+                    Choose one approved candidate. Your vote is recorded once and cannot be changed.
+                </p>
+            </div>
+            <div class="vote-summary-card">
+                <div class="vote-summary-row">
+                    <span>Starts</span>
+                    <strong>{{ election.start_time.strftime('%b %d, %Y %I:%M %p') if election.start_time else 'N/A' }}</strong>
+                </div>
+                <div class="vote-summary-row">
+                    <span>Ends</span>
+                    <strong>{{ election.end_time.strftime('%b %d, %Y %I:%M %p') if election.end_time else 'N/A' }}</strong>
+                </div>
+                <div class="vote-summary-row">
+                    <span>Eligible candidates</span>
+                    <strong>{{ approved_candidates|length }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if error_message %}
+    <div class="alert alert-error">{{ error_message }}</div>
+    {% endif %}
+
+    <div class="vote-layout">
+        <section class="vote-panel">
+            <div class="vote-panel-header">
+                <h2>Approved Candidates</h2>
+                <p>Select exactly one candidate to cast your vote.</p>
+            </div>
+
+            {% if approved_candidates %}
+            <form action="/student/elections/{{ election.id }}/vote" method="POST" class="vote-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                <div class="candidate-grid">
+                    {% for candidate in approved_candidates %}
+                    <label class="candidate-option">
+                        <input type="radio" name="candidate_application_id" value="{{ candidate.id }}" required>
+                        <div class="candidate-card">
+                            <div class="candidate-card-top">
+                                <div class="candidate-avatar">
+                                    {{ candidate.candidate_name[0] | upper if candidate.candidate_name else 'C' }}
+                                </div>
+                                <div>
+                                    <h3>{{ candidate.candidate_name }}</h3>
+                                    <p>{{ candidate.department }} {% if candidate.academic_year %}· {{ candidate.academic_year }}{% endif %}</p>
+                                </div>
+                            </div>
+                            <div class="candidate-manifesto">
+                                {{ candidate.manifesto }}
+                            </div>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+
+                <div class="vote-note">
+                    <strong>Note:</strong> The vote is final after submission. The page does not show live counts.
+                </div>
+
+                <div class="vote-actions">
+                    <a href="/student/elections/{{ election.id }}" class="btn-secondary">Cancel</a>
+                    <button type="submit" class="btn-primary vote-submit">Submit Vote</button>
+                </div>
+            </form>
+            {% else %}
+            <div class="vote-empty-state">
+                <h3>No approved candidates yet</h3>
+                <p>Voting is temporarily unavailable because this election does not have any approved candidates.</p>
+                <a href="/student/elections/{{ election.id }}" class="btn-secondary">Back to Election</a>
+            </div>
+            {% endif %}
+        </section>
+
+        <aside class="vote-sidebar">
+            <div class="vote-sidebar-card">
+                <h3>How voting works</h3>
+                <ul>
+                    <li>Select one approved candidate.</li>
+                    <li>Submit once and the vote is locked.</li>
+                    <li>Only this election's candidates are shown here.</li>
+                </ul>
+            </div>
+        </aside>
+    </div>
+</div>
+{% endblock %}

@@ -232,7 +232,7 @@ Stores final committed votes.
 ## Primary Key
 
 ```text
-(student_id, election_id)
+(user_id, election_id)
 ```
 
 This enforces:
