@@ -572,7 +572,7 @@ async def submit_student_vote(
         with get_db_cursor() as cursor:
             cursor.execute(
                 """
-                INSERT INTO votes (user_id, election_id, candidate_application_id, voted_at)
+                INSERT INTO votes (voter_id, election_id, candidate_id, voted_at)
                 VALUES (%s, %s, %s, %s)
                 """,
                 (user["user_id"], id, candidate_application_id, datetime.now(timezone.utc))
