@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Web search",
+      "Bash(uvicorn app:app --reload)",
+      "Bash(uvicorn app:app --port 8000)",
+      "Bash(python *)",
+      "Bash(pytest *)",
+      "Bash(curl *)",
+      "Bash(git diff)",
+      "Bash(git diff --staged)",
+      "mcp__plugin_figma_figma__get_design_context"
+    ]
+  }
+}

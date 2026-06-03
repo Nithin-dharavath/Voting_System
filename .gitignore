@@ -5,5 +5,4 @@ __pycache__/
 venv/
 .env
 .pytest_cache/
-*.codex
 uploads/
