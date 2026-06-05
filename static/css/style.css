@@ -1109,6 +1109,30 @@ button:hover {
 
 /* ... existing styles ... */
 
+.hidden {
+    display: none !important;
+}
+
+.nav-edit-btn {
+    padding: 0.4rem 0.8rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    background: white;
+    color: var(--text-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.2s;
+}
+
+.nav-edit-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
 .empty-state {
     padding: 5rem 0;
     text-align: center;
@@ -1195,4 +1219,28 @@ button:hover {
         width: 100%;
         min-width: 0;
     }
+}
+
+.hidden {
+    display: none !important;
+}
+
+.nav-edit-btn {
+    padding: 0.4rem 0.8rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-color);
+    background: white;
+    color: var(--text-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.2s;
+}
+
+.nav-edit-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
 }

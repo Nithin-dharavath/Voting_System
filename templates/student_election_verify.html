@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/css/verify.css">
+</head>
+<body>
+{% extends "base.html" %}
+
+{% block title %}Identity Verification - {{ election.title }}{% endblock %}
+
+{% block content %}
+<div class="verify-container">
+    <div class="verify-card">
+        <div class="verify-header">
+            <div class="verify-icon-circle">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <h1>Verify Your Identity</h1>
+            <p>To ensure a fair and secure election, please upload your verification document before casting your vote.</p>
+        </div>
+
+        {% if error_message %}
+        <div class="alert alert-error">{{ error_message }}</div>
+        {% endif %}
+
+        <form action="/student/elections/{{ election.id }}/verify" method="POST" enctype="multipart/form-data" class="verify-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <div class="verify-section">
+                <label class="section-label">Select Verification Method</label>
+                <div class="type-selector">
+                    <label class="type-option">
+                        <input type="radio" name="verification_type" value="SELFIE" required checked>
+                        <div class="type-card">
+                            <div class="type-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.25H13.5"/><path d="M21 12a9 9 0 0 0-18 0 9 9 0 0 0 18 0Z"/><path d="M12 13v4"/><path d="M9 16h6"/></svg>
+                            </div>
+                            <span class="type-name">Selfie</span>
+                            <span class="type-desc">Clear face photo</span>
+                        </div>
+                    </label>
+                    <label class="type-option">
+                        <input type="radio" name="verification_type" value="SIGNATURE">
+                        <div class="type-card">
+                            <div class="type-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12L15 15"/><path d="M12 12L9 15"/><path d="M12 12L12 15"/><path d="M16 4l-4 4-4-4"/><path d="M12 8v8"/><path d="M8 16h8"/></svg>
+                            </div>
+                            <span class="type-name">Signature</span>
+                            <span class="type-desc">Digital sign photo</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="verify-section">
+                <label class="section-label">Upload Document</label>
+                <div class="upload-zone" id="dropZone">
+                    <div class="upload-content">
+                        <div class="upload-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        </div>
+                        <p class="upload-text">Drag and drop your image here or <span class="browse-link">browse</span></p>
+                        <p class="upload-hint">Supported formats: JPG, JPEG, PNG</p>
+                        <input type="file" name="verification_file" id="fileInput" accept=".jpg, .jpeg, .png" required>
+                    </div>
+                    <div class="file-preview" id="filePreview" style="display: none;">
+                        <img src="" id="previewImg" alt="Preview">
+                        <div class="preview-info">
+                            <span id="fileName">filename.jpg</span>
+                            <button type="button" class="remove-btn" id="removeFile">&times;</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="verify-actions">
+                <a href="/student/elections/{{ election.id }}/vote" class="btn-secondary">Back to Vote</a>
+                <button type="submit" class="btn-primary submit-vote">Submit & Cast Vote</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const filePreview = document.getElementById('filePreview');
+    const previewImg = document.getElementById('previewImg');
+    const fileNameDisplay = document.getElementById('fileName');
+    const removeBtn = document.getElementById('removeFile');
+
+    document.querySelector('.browse-link').addEventListener('click', (e) => {
+        e.preventDefault();
+        fileInput.click();
+    });
+
+    fileInput.addEventListener('change', function() {
+        handleFile(this.files[0]);
+    });
+
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.classList.remove('drag-over');
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        handleFile(file);
+    });
+
+    function handleFile(file) {
+        if (!file) return;
+
+        const allowedExtensions = ['image/jpeg', 'image/jpg', 'image/png'];
+        if (!allowedExtensions.includes(file.type)) {
+            alert('Please upload a valid image file (JPG, JPEG, PNG).');
+            return;
+        }
+
+        fileInput.files = new DataTransfer().add(file); // Not perfectly compatible but for demo
+        // Better way: just store in a hidden field or use a real file input
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            previewImg.src = e.target.result;
+            fileNameDisplay.textContent = file.name;
+            document.querySelector('.upload-content').style.display = 'none';
+            filePreview.style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    removeBtn.addEventListener('click', () => {
+        fileInput.value = '';
+        document.querySelector('.upload-content').style.display = 'flex';
+        filePreview.style.display = 'none';
+    });
+</script>
+{% endblock %}
+</body>
+</html>

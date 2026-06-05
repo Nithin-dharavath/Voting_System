@@ -3,691 +3,245 @@
 {% block title %}My Profile | Online Voting System{% endblock %}
 
 {% block content %}
-<style>
-    :root {
-        --profile-bg: #f8fafc;
-        --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        --border-color: #e2e8f0;
-        --text-main: #1e293b;
-        --text-muted: #64748b;
-        --gradient-header: linear-gradient(to right, #eff6ff, #eef2ff);
-    }
+<link rel="stylesheet" href="{{ url_for('static', path='/css/profile.css') }}">
 
-    .profile-page-container {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 2rem 1rem;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
+<div class="profile-page">
 
-    /* Main Profile Card */
-    .profile-main-card {
-        background: white;
-        border-radius: 1rem;
-        box-shadow: var(--card-shadow);
-        overflow: hidden;
-        border: 1px solid var(--border-color);
-        margin-bottom: 3rem;
-    }
+    <!-- ============ HEADER CARD (avatar + identity + actions) ============ -->
+    <section class="profile-header-card">
+        <div class="profile-avatar-wrap">
+            {% if user.profile_picture %}
+                <img src="{{ user.profile_picture }}" class="profile-avatar" alt="Profile">
+            {% else %}
+                <div class="avatar-placeholder">{{ user.full_name[0] if user.full_name else 'U' }}</div>
+            {% endif %}
+            <label for="profile_pic" class="avatar-edit-btn" title="Update image">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </label>
+        </div>
 
-    .profile-header {
-        background: var(--gradient-header);
-        padding: 2.5rem 2rem;
-        position: relative;
-        display: flex;
-        align-items: center;
-        gap: 2rem;
-    }
-
-    .avatar-wrapper {
-        position: relative;
-        width: 120px;
-        height: 120px;
-    }
-
-    .profile-avatar {
-        width: 120px;
-        height: 120px;
-        border-radius: 50%;
-        border: 4px solid white;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        object-fit: cover;
-        background: #fff;
-    }
-
-    .avatar-placeholder {
-        width: 120px;
-        height: 120px;
-        border-radius: 50%;
-        background: var(--primary-color);
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 3rem;
-        font-weight: 600;
-        border: 4px solid white;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-
-    .avatar-edit-btn {
-        position: absolute;
-        bottom: 0;
-        right: 0;
-        width: 32px;
-        height: 32px;
-        background: white;
-        border: 1px solid var(--border-color);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        transition: all 0.2s;
-    }
-
-    .avatar-edit-btn:hover {
-        background: #f8fafc;
-        transform: scale(1.1);
-    }
-
-    .profile-title-area {
-        flex: 1;
-    }
-
-    .profile-name-row {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 0.5rem;
-    }
-
-    .profile-name {
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: var(--text-main);
-        margin: 0;
-    }
-
-    .status-badge {
-        padding: 0.25rem 0.75rem;
-        border-radius: 9999px;
-        font-size: 0.75rem;
-        font-weight: 600;
-        background: #f1f5f9;
-        color: #475569;
-        border: 1px solid var(--border-color);
-    }
-
-    .profile-meta-info {
-        display: flex;
-        gap: 1.5rem;
-        font-size: 0.875rem;
-        color: var(--text-muted);
-    }
-
-    .meta-item {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-    }
-
-    .edit-profile-btn {
-        position: absolute;
-        top: 1.5rem;
-        right: 1.5rem;
-        padding: 0.5rem 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid var(--border-color);
-        background: white;
-        color: var(--text-main);
-        font-size: 0.875rem;
-        font-weight: 500;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        transition: all 0.2s;
-    }
-
-    .edit-profile-btn:hover {
-        background: #f8fafc;
-        border-color: #cbd5e1;
-    }
-
-    /* Tabs Styling */
-    .profile-tabs {
-        display: flex;
-        border-bottom: 1px solid var(--border-color);
-        padding: 0 2rem;
-        background: white;
-    }
-
-    .tab-btn {
-        padding: 1rem 1.5rem;
-        cursor: pointer;
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: var(--text-muted);
-        border-bottom: 2px solid transparent;
-        transition: all 0.2s;
-        background: none;
-        border: none;
-    }
-
-    .tab-btn.active {
-        color: var(--primary-color);
-        border-bottom-color: var(--primary-color);
-    }
-
-    .tab-content {
-        display: none;
-        padding: 2rem;
-        animation: fadeIn 0.3s ease;
-    }
-
-    .tab-content.active {
-        display: block;
-    }
-
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(5px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    /* Personal Info Grid */
-    .info-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 1.5rem;
-    }
-
-    .info-field {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .info-label {
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.025em;
-    }
-
-    .info-box {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.625rem 0.875rem;
-        border: 1px solid var(--border-color);
-        border-radius: 0.5rem;
-        font-size: 0.875rem;
-        color: var(--text-main);
-        background: #fff;
-    }
-
-    .info-input {
-        width: 100%;
-        padding: 0.625rem 0.875rem;
-        border: 1px solid var(--border-color);
-        border-radius: 0.5rem;
-        font-size: 0.875rem;
-        transition: border-color 0.2s;
-    }
-
-    .info-input:focus {
-        outline: none;
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-    }
-
-    .form-actions {
-        margin-top: 2rem;
-        display: flex;
-        gap: 1rem;
-        justify-content: flex-end;
-    }
-
-    .btn-save {
-        background: var(--primary-color);
-        color: white;
-        padding: 0.625rem 1.5rem;
-        border-radius: 0.5rem;
-        border: none;
-        font-weight: 600;
-        cursor: pointer;
-        transition: opacity 0.2s;
-    }
-
-    .btn-save:hover { opacity: 0.9; }
-
-    .btn-cancel {
-        background: white;
-        color: var(--text-main);
-        padding: 0.625rem 1.5rem;
-        border-radius: 0.5rem;
-        border: 1px solid var(--border-color);
-        font-weight: 600;
-        cursor: pointer;
-    }
-
-    /* Voting History List */
-    .history-list {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-
-    .history-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1rem;
-        border: 1px solid var(--border-color);
-        border-radius: 0.75rem;
-        background: #fff;
-        transition: transform 0.2s;
-    }
-
-    .history-item:hover { transform: translateX(4px); }
-
-    .history-info h4 {
-        margin: 0;
-        font-size: 0.95rem;
-        color: var(--text-main);
-    }
-
-    .history-info p {
-        margin: 0;
-        font-size: 0.8125rem;
-        color: var(--text-muted);
-    }
-
-    /* Applied Elections Grid */
-    .applied-section {
-        margin-top: 3rem;
-    }
-
-    .applied-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
-    }
-
-    .applied-title {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: var(--text-main);
-        margin: 0;
-    }
-
-    .applied-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        gap: 1.5rem;
-    }
-
-    .election-card {
-        background: white;
-        border: 2px solid var(--border-color);
-        border-radius: 1rem;
-        padding: 1.5rem;
-        transition: all 0.3s ease;
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-
-    .election-card.approved { border-color: #bbf7d0; background: #f0fdf4; }
-    .election-card.pending { border-color: #fef08a; background: #fefce8; }
-    .election-card.rejected { border-color: #fecaca; background: #fef2f2; }
-
-    .election-card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 1rem;
-    }
-
-    .election-card-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: var(--text-main);
-        margin: 0;
-    }
-
-    .election-type-tag {
-        font-size: 0.7rem;
-        padding: 0.2rem 0.5rem;
-        background: #f1f5f9;
-        border-radius: 4px;
-        color: #475569;
-        text-transform: uppercase;
-        font-weight: 600;
-    }
-
-    .election-details {
-        display: flex;
-        flex-direction: column;
-        gap: 0.6rem;
-        font-size: 0.875rem;
-        color: #475569;
-    }
-
-    .detail-row {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-    }
-
-    .detail-label {
-        color: var(--text-muted);
-        width: 100px;
-    }
-
-    .detail-value {
-        font-weight: 500;
-        color: var(--text-main);
-    }
-
-    .rejection-alert {
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        color: #b91c1c;
-        padding: 0.75rem;
-        border-radius: 0.5rem;
-        font-size: 0.8125rem;
-        margin-top: 0.5rem;
-    }
-
-    .card-footer {
-        margin-top: auto;
-        padding-top: 1rem;
-        border-top: 1px solid var(--border-color);
-        display: flex;
-        gap: 0.75rem;
-    }
-
-    .btn-outline-sm {
-        flex: 1;
-        padding: 0.5rem;
-        border-radius: 0.375rem;
-        border: 1px solid var(--border-color);
-        background: white;
-        font-size: 0.75rem;
-        font-weight: 600;
-        cursor: pointer;
-        text-align: center;
-    }
-
-    .btn-primary-sm {
-        flex: 1;
-        padding: 0.5rem;
-        border-radius: 0.375rem;
-        background: var(--primary-color);
-        color: white;
-        font-size: 0.75rem;
-        font-weight: 600;
-        border: none;
-        cursor: pointer;
-    }
-
-    @media (max-width: 640px) {
-        .profile-header {
-            flex-direction: column;
-            text-align: center;
-        }
-        .profile-name-row {
-            justify-content: center;
-        }
-        .profile-meta-info {
-            justify-content: center;
-        }
-        .edit-profile-btn {
-            position: static;
-            margin: 0 auto;
-            display: flex;
-        }
-    }
-</style>
-
-<div class="profile-page-container">
-    <div class="profile-main-card">
-        <div class="profile-header">
-            <div class="avatar-wrapper">
-                {% if user.profile_picture %}
-                    <img src="{{ user.profile_picture }}" class="profile-avatar" alt="Profile">
-                {% else %}
-                    <div class="avatar-placeholder">{{ user.full_name[0] if user.full_name else 'U' }}</div>
-                {% endif %}
-                <div class="avatar-edit-btn" onclick="document.getElementById('profile_pic').click()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                </div>
+        <div class="profile-identity">
+            <h1>{{ user.full_name }}</h1>
+            <div class="profile-meta-row">
+                <span class="meta-chip">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    {{ user.user_id or 'STU-2024-001' }}
+                </span>
+                <span class="meta-chip">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1v1a3 3 0 0 0 6 0V8m0 1v1a3 3 0 0 0 6 0V9m-18 10a3 3 0 0 0 6 0v-1a3 3 0 0 0-6 0v1z"/></svg>
+                    {{ user.department or 'Undeclared Department' }}
+                </span>
+                <span class="meta-chip">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="12" y1="2" x2="12" y2="6"/></svg>
+                    {{ user.academic_year or 'Academic Year not set' }}
+                </span>
             </div>
-            <div class="profile-title-area">
-                <div class="profile-name-row">
-                    <h1 class="profile-name">{{ user.full_name }}</h1>
-                    <span class="status-badge">Verified Voter</span>
-                </div>
-                <div class="profile-meta-info">
-                    <span class="meta-item">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                        {{ user.user_id if user.user_id else 'STU-2024-001' }}
-                    </span>
-                    <span class="meta-item">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 6-9 9-9 9s-9-3-9-9"/><path d="M3 10h18"/><path d="M12 10V3"/></svg>
-                        {{ user.department if user.department else 'Computer Science' }}
-                    </span>
-                </div>
-            </div>
-            <button class="edit-profile-btn" onclick="toggleEditMode()">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 6H3"/><path d="M17 21l-4-4 4-4"/><path d="M3 18h18"/></svg>
+        </div>
+
+        <div class="profile-header-actions">
+            <button type="button" id="edit-profile-btn" class="btn-primary" onclick="toggleEditMode()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                 Edit Profile
             </button>
+            <a href="#" class="btn-secondary">Download Profile</a>
         </div>
+    </section>
 
-        <div class="profile-tabs">
-            <button class="tab-btn active" onclick="switchTab(event, 'personal')">Personal Info</button>
-            <button class="tab-btn" onclick="switchTab(event, 'voting')">Voting History</button>
-            <button class="tab-btn" onclick="switchTab(event, 'settings')">Settings</button>
-        </div>
-
-        <div id="personal" class="tab-content active">
-            <form action="/profile/update" method="POST" enctype="multipart/form-data" id="profile-form">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <div class="info-grid">
-                    <div class="info-field">
-                        <label class="info-label">Full Name</label>
-                        <div class="input-wrapper" id="field-full_name">
-                            <div class="info-box">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                                {{ user.full_name }}
-                            </div>
-                            <input type="text" name="full_name" class="info-input" value="{{ user.full_name }}" style="display:none" required>
-                        </div>
-                    </div>
-                    <div class="info-field">
-                        <label class="info-label">Email Address</label>
-                        <div class="input-wrapper" id="field-email">
-                            <div class="info-box">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                                {{ user.email }}
-                            </div>
-                            <input type="email" name="email" class="info-input" value="{{ user.email }}" style="display:none" required>
-                        </div>
-                    </div>
-                    <div class="info-field">
-                        <label class="info-label">Department</label>
-                        <div class="input-wrapper" id="field-department">
-                            <div class="info-box">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1v1a3 3 0 0 0 6 0V8m0 1v1a3 3 0 0 0 6 0V9m-18 10a3 3 0 0 0 6 0v-1a3 3 0 0 0-6 0v1z"/></svg>
-                                {{ user.department }}
-                            </div>
-                            <input type="text" name="department" class="info-input" value="{{ user.department }}" style="display:none" required>
-                        </div>
-                    </div>
-                    <div class="info-field">
-                        <label class="info-label">Academic Year</label>
-                        <div class="input-wrapper" id="field-academic_year">
-                            <div class="info-box">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="12" y1="2" x2="12" y2="6"/></svg>
-                                {{ user.academic_year }}
-                            </div>
-                            <input type="text" name="academic_year" class="info-input" value="{{ user.academic_year }}" style="display:none" required>
-                        </div>
-                    </div>
-                    <div class="info-field">
-                        <label class="info-label">Profile Picture</label>
-                        <div class="input-wrapper" id="field-profile_pic">
-                            <div class="info-box">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 15"/></svg>
-                                Update Image
-                            </div>
-                            <input type="file" name="profile_pic" id="profile_pic" class="info-input" style="display:none" accept=".jpg, .jpeg, .png">
-                        </div>
-                    </div>
-                </div>
-                <div class="form-actions" id="form-actions" style="display:none">
-                    <button type="button" class="btn-cancel" onclick="toggleEditMode()">Cancel</button>
-                    <button type="submit" class="btn-save">Save Changes</button>
-                </div>
-            </form>
-        </div>
-
-        <div id="voting" class="tab-content">
-            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:300px; color:var(--text-muted); text-align:center;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:1rem; opacity:0.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                <p>No voting history yet.</p>
-                <p style="font-size:0.8125rem">Your completed votes will appear here.</p>
-            </div>
-        </div>
-
-        <div id="settings" class="tab-content">
-            <div style="display:flex; flex-direction:column; gap:1rem;">
-                <div class="info-box" style="justify-content: space-between; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
-                    <div style="display:flex; align-items:center; gap:0.75rem;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 0-10 10c0 5.523 4.477 10 10 10s10-4.477 10-10A10 10 0 0 0 12 2z"/><path d="m12 8 2 2-2 2-2-2 2-2z"/></svg>
-                        <span>Change Password</span>
-                    </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                </div>
-                <div class="info-box" style="justify-content: space-between; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
-                    <div style="display:flex; align-items:center; gap:0.75rem;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                        <span>Two-Factor Authentication</span>
-                    </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                </div>
-                <div class="info-box" style="justify-content: space-between; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
-                    <div style="display:flex; align-items:center; gap:0.75rem;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
-                        <span>Privacy Settings</span>
-                    </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                </div>
-            </div>
-        </div>
+    <!-- ============ TABS ============ -->
+    <div class="profile-tabs-wrap">
+        <nav class="profile-tabs" role="tablist">
+            <button class="profile-tab active" data-tab="personal" role="tab">Personal Info</button>
+            <button class="profile-tab" data-tab="voting" role="tab">Voting History</button>
+            <button class="profile-tab" data-tab="settings" role="tab">Settings</button>
+        </nav>
     </div>
 
-    <div class="applied-section">
-        <div class="applied-header">
-            <h2 class="applied-title">Applied Elections</h2>
-            <span class="status-badge">2 Applications</span>
+    <!-- ============ PANEL: PERSONAL ============ -->
+    <section id="panel-personal" class="profile-panel active" role="tabpanel">
+        <form action="/profile/update" method="POST" enctype="multipart/form-data" id="profile-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="file" name="profile_pic" id="profile_pic" accept=".jpg, .jpeg, .png">
+
+            <div class="info-grid">
+                <div class="info-field">
+                    <label>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        Full Name
+                    </label>
+                    <div class="info-display" data-display>{{ user.full_name }}</div>
+                    <input type="text" name="full_name" class="info-input" value="{{ user.full_name }}" data-input style="display:none" required>
+                </div>
+
+                <div class="info-field">
+                    <label>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                        Email
+                    </label>
+                    <div class="info-display" data-display>{{ user.email }}</div>
+                    <input type="email" name="email" class="info-input" value="{{ user.email }}" data-input style="display:none" required>
+                </div>
+
+                <div class="info-field">
+                    <label>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1v1a3 3 0 0 0 6 0V8m0 1v1a3 3 0 0 0 6 0V9m-18 10a3 3 0 0 0 6 0v-1a3 3 0 0 0-6 0v1z"/></svg>
+                        Department
+                    </label>
+                    <div class="info-display" data-display>{{ user.department }}</div>
+                    <input type="text" name="department" class="info-input" value="{{ user.department }}" data-input style="display:none" required>
+                </div>
+
+                <div class="info-field">
+                    <label>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="12" y1="2" x2="12" y2="6"/></svg>
+                        Academic Year
+                    </label>
+                    <div class="info-display" data-display>{{ user.academic_year }}</div>
+                    <input type="text" name="academic_year" class="info-input" value="{{ user.academic_year }}" data-input style="display:none" required>
+                </div>
+            </div>
+
+            <div class="profile-form-actions" id="form-actions" style="display:none">
+                <button type="button" class="btn-cancel" onclick="toggleEditMode()">Cancel</button>
+                <button type="submit" class="btn-save">Save Changes</button>
+            </div>
+        </form>
+    </section>
+
+    <!-- ============ PANEL: VOTING HISTORY ============ -->
+    <section id="panel-voting" class="profile-panel" role="tabpanel">
+        <div class="history-empty">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <p>No voting history yet.</p>
+            <p><small>Your completed votes will appear here.</small></p>
         </div>
+    </section>
+
+    <!-- ============ PANEL: SETTINGS ============ -->
+    <section id="panel-settings" class="profile-panel" role="tabpanel">
+        <ul class="settings-list">
+            <li class="settings-item">
+                <a href="#" class="settings-link">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 0-10 10c0 5.523 4.477 10 10 10s10-4.477 10-10A10 10 0 0 0 12 2z"/><path d="m12 8 2-2-2-2-2 2 2 2z"/></svg>
+                    <span>Change Password</span>
+                    <span class="chev">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </span>
+                </a>
+            </li>
+            <li class="settings-item">
+                <a href="#" class="settings-link">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span>Two-Factor Authentication</span>
+                    <span class="chev">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </span>
+                </a>
+            </li>
+            <li class="settings-item">
+                <a href="#" class="settings-link">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
+                    <span>Privacy Settings</span>
+                    <span class="chev">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </span>
+                </a>
+            </li>
+            <li class="settings-item">
+                <a href="#" class="settings-link">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <span>Notification Preferences</span>
+                    <span class="chev">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </span>
+                </a>
+            </li>
+        </ul>
+    </section>
+
+    <!-- ============ APPLIED ELECTIONS ============ -->
+    <section class="applied-section">
+        <h2 class="section-title">Applications in motion</h2>
 
         <div class="applied-grid">
-            <!-- Election Card 1: Pending -->
-            <div class="election-card pending">
-                <div class="election-card-header">
-                    <h3 class="election-card-title">Presidential Election 2026</h3>
-                    <span class="status-badge" style="background: #fefce8; color: #854d0e; border-color: #fef08a;">Pending</span>
+            <!-- Card 1: Pending -->
+            <article class="applied-card pending">
+                <div class="applied-card-header">
+                    <h3>Presidential Election</h3>
+                    <span class="meta-row"><span class="k">Status</span><span class="v">Pending</span></span>
                 </div>
-                <div class="election-type-tag">National</div>
-                <div class="election-details">
-                    <div class="detail-row">
-                        <span class="detail-label">Date:</span>
-                        <span class="detail-value">Nov 3, 2026</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Deadline:</span>
-                        <span class="detail-value">Oct 15, 2026</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Applied:</span>
-                        <span class="detail-value">Jan 20, 2026</span>
-                    </div>
-                </div>
-                <div style="margin-top: 0.5rem; font-size: 0.8125rem; color: #475569;">
-                    <strong>Location:</strong> City Hall - Room 204
-                </div>
-                <div class="card-footer">
-                    <button class="btn-outline-sm">View Details</button>
-                    <button class="btn-primary-sm" style="background: #94a3b8; cursor: not-allowed;" disabled>Download Ballot</button>
-                </div>
-            </div>
 
-            <!-- Election Card 2: Approved -->
-            <div class="election-card approved">
-                <div class="election-card-header">
-                    <h3 class="election-card-title">Local School Board Election</h3>
-                    <span class="status-badge" style="background: #dcfce7; color: #166534; border-color: #bbf7d0;">Approved</span>
+                <div class="meta-row"><span class="k">Type</span><span class="v">National</span></div>
+                <div class="meta-row"><span class="k">Date</span><span class="v">Nov 3, 2026</span></div>
+                <div class="meta-row"><span class="k">Deadline</span><span class="v">Oct 15, 2026</span></div>
+                <div class="meta-row"><span class="k">Applied</span><span class="v">Jan 20, 2026</span></div>
+
+                <div class="location">— City Hall · Room 204</div>
+
+                <div class="applied-card-actions">
+                    <a href="#" class="btn-line">View Details</a>
+                    <a href="#" class="btn-line" aria-disabled="true">Ballot Locked</a>
                 </div>
-                <div class="election-type-tag">Local</div>
-                <div class="election-details">
-                    <div class="detail-row">
-                        <span class="detail-label">Date:</span>
-                        <span class="detail-value">Sep 15, 2026</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Deadline:</span>
-                        <span class="detail-value">Aug 30, 2026</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Applied:</span>
-                        <span class="detail-value">Jun 5, 2026</span>
-                    </div>
+            </article>
+
+            <!-- Card 2: Approved -->
+            <article class="applied-card approved">
+                <div class="applied-card-header">
+                    <h3>School Board Local</h3>
+                    <span class="meta-row"><span class="k">Status</span><span class="v">Approved</span></span>
                 </div>
-                <div style="margin-top: 0.5rem; font-size: 0.8125rem; color: #475569;">
-                    <strong>Location:</strong> Lincoln High School Gymnasium
+
+                <div class="meta-row"><span class="k">Type</span><span class="v">Local</span></div>
+                <div class="meta-row"><span class="k">Date</span><span class="v">Sep 15, 2026</span></div>
+                <div class="meta-row"><span class="k">Deadline</span><span class="v">Aug 30, 2026</span></div>
+                <div class="meta-row"><span class="k">Applied</span><span class="v">Jun 5, 2026</span></div>
+
+                <div class="location">— Lincoln High School Gymnasium</div>
+
+                <div class="applied-card-actions">
+                    <a href="#" class="btn-line">View Details</a>
+                    <a href="#" class="btn-line btn-solid">Download Ballot</a>
                 </div>
-                <div class="card-footer">
-                    <button class="btn-outline-sm">View Details</button>
-                    <button class="btn-primary-sm">Download Ballot</button>
-                </div>
-            </div>
+            </article>
         </div>
-    </div>
+    </section>
+
 </div>
 
 <script>
-    function switchTab(event, tabId) {
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+// Tab switching
+document.querySelectorAll('.profile-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const id = btn.dataset.tab;
+        document.querySelectorAll('.profile-tab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.profile-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + id).classList.add('active');
+    });
+});
 
-        event.currentTarget.classList.add('active');
-        document.getElementById(tabId).classList.add('active');
+// Edit mode
+function toggleEditMode() {
+    const displays = document.querySelectorAll('[data-display]');
+    const inputs   = document.querySelectorAll('[data-input]');
+    const actions  = document.getElementById('form-actions');
+    const editBtn  = document.getElementById('edit-profile-btn');
+
+    const isEditing = actions.style.display === 'flex';
+
+    if (isEditing) {
+        // Cancel
+        displays.forEach(d => d.style.display = '');
+        inputs.forEach(i => i.style.display = 'none');
+        actions.style.display = 'none';
+        if (editBtn) editBtn.innerHTML = editBtn.dataset.original || editBtn.innerHTML;
+    } else {
+        // Edit
+        if (!editBtn.dataset.original) editBtn.dataset.original = editBtn.innerHTML;
+        displays.forEach(d => d.style.display = 'none');
+        inputs.forEach(i => i.style.display = '');
+        actions.style.display = 'flex';
+        editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg> Cancel Editing';
     }
-
-    function toggleEditMode() {
-        const btn = document.querySelector('.edit-profile-btn');
-        const actions = document.getElementById('form-actions');
-        const isEditing = actions.style.display === 'flex';
-
-        if (isEditing) {
-            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 6H3"/><path d="M17 21l-4-4 4-4"/><path d="M3 18h18"/></svg> Edit Profile`;
-            actions.style.display = 'none';
-            document.querySelectorAll('.input-wrapper .info-box').forEach(box => box.style.display = 'flex');
-            document.querySelectorAll('.info-input').forEach(input => input.style.display = 'none');
-        } else {
-            btn.innerHTML = 'Cancel';
-            actions.style.display = 'flex';
-            document.querySelectorAll('.input-wrapper .info-box').forEach(box => box.style.display = 'none');
-            document.querySelectorAll('.info-input').forEach(input => input.style.display = 'block');
-        }
-    }
+}
 </script>
 {% endblock %}

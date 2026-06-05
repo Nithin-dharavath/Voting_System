@@ -28,12 +28,18 @@ def ensure_datetime(dt):
     if dt is None:
         return None
     if isinstance(dt, datetime):
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
         return dt
     try:
-        return datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
+        dt_obj = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
+        return dt_obj.replace(tzinfo=timezone.utc)
     except ValueError:
         try:
-            return datetime.fromisoformat(dt)
+            dt_obj = datetime.fromisoformat(dt)
+            if dt_obj.tzinfo is None:
+                return dt_obj.replace(tzinfo=timezone.utc)
+            return dt_obj
         except ValueError:
             return dt # Return as is if parsing fails, template might still fail but we tried
 
@@ -181,7 +187,7 @@ def mark_voting_session_completed(user_id: int, election_id: int):
                 """
                 UPDATE voting_sessions
                 SET completed = 1
-                WHERE user_id = %s AND election_id = %s AND completed = 0
+                WHERE student_id = %s AND election_id = %s AND completed = 0
                 """,
                 (user_id, election_id)
             )
@@ -559,7 +565,7 @@ async def submit_student_vote(
         return RedirectResponse(url="/student/elections", status_code=302)
 
     if election["status"] != "ACTIVE":
-        return RedirectResponse(url=f"/student/elections/{id}?error=inactive", status_code=302)
+        return RedirectResponse(url=f"/student/elections/{id}?error=inactive", status_code=303)
 
     if has_user_voted(user["user_id"], id):
         return RedirectResponse(url=f"/student/elections/{id}?success=already_voted", status_code=303)
@@ -570,21 +576,19 @@ async def submit_student_vote(
 
     try:
         with get_db_cursor() as cursor:
+            # Ensure session exists and update it with the chosen candidate
             cursor.execute(
-                """
-                INSERT INTO votes (voter_id, election_id, candidate_id, voted_at)
-                VALUES (%s, %s, %s, %s)
-                """,
-                (user["user_id"], id, candidate_application_id, datetime.now(timezone.utc))
+                "INSERT INTO voting_sessions (student_id, election_id, started_at, expires_at, completed, candidate_application_id) "
+                "VALUES (%s, %s, %s, %s, 0, %s) "
+                "ON DUPLICATE KEY UPDATE candidate_application_id = %s, started_at = %s, expires_at = %s",
+                (user["user_id"], id, datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(minutes=15), candidate_application_id,
+                 candidate_application_id, datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(minutes=15))
             )
-    except mysql.connector.IntegrityError:
-        return RedirectResponse(url=f"/student/elections/{id}?success=already_voted", status_code=303)
     except Exception:
-        logger.exception("Failed to record vote")
+        logger.exception("Failed to record session choice")
         return RedirectResponse(url=f"/student/elections/{id}/vote?error=internal", status_code=303)
 
-    mark_voting_session_completed(user["user_id"], id)
-    return RedirectResponse(url=f"/student/elections/{id}?success=voted", status_code=303)
+    return RedirectResponse(url=f"/student/elections/{id}/verify", status_code=303)
 
 @app.post("/candidates/apply")
 async def apply_as_candidate(
@@ -999,6 +1003,24 @@ async def admin_election_candidates(request: Request, id: int, user = Depends(ad
     return response
 
 
+def save_verification_file(user_id: int, election_id: int, v_type: str, file: UploadFile) -> Optional[str]:
+    allowed_extensions = {'.jpg', '.jpeg', '.png'}
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_extensions:
+        return None
+
+    folder = "selfies" if v_type == "SELFIE" else "signatures"
+    filename = f"verify_{election_id}_{user_id}_{uuid.uuid4().hex[:8]}{ext}"
+    file_path = os.path.join("uploads", folder, filename)
+
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        return f"/uploads/{folder}/{filename}"
+    except Exception as e:
+        logger.error(f"Error saving verification file for user {user_id}: {e}")
+        return None
+
 def save_profile_picture(user_id: int, file: UploadFile) -> Optional[str]:
     allowed_extensions = {'.jpg', '.jpeg', '.png'}
     ext = os.path.splitext(file.filename)[1].lower()
@@ -1015,6 +1037,119 @@ def save_profile_picture(user_id: int, file: UploadFile) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error saving profile picture for user {user_id}: {e}")
         return None
+
+@app.get("/student/elections/{id}/verify", response_class=HTMLResponse)
+async def student_election_verify_page(request: Request, id: int, user = Depends(student_guard)):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/student/elections", status_code=302)
+
+    if election["status"] != "ACTIVE":
+        return RedirectResponse(url=f"/student/elections/{id}?error=inactive", status_code=302)
+
+    if has_user_voted(user["user_id"], id):
+        return RedirectResponse(url=f"/student/elections/{id}?success=already_voted", status_code=302)
+
+    # Ensure session is active and candidate is selected
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            "SELECT candidate_application_id, expires_at FROM voting_sessions WHERE student_id = %s AND election_id = %s AND completed = 0",
+            (user["user_id"], id)
+        )
+        session = cursor.fetchone()
+
+    if not session or not session['candidate_application_id']:
+        return RedirectResponse(url=f"/student/elections/{id}/vote?error=internal", status_code=302)
+
+    expires_at = ensure_datetime(session['expires_at'])
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        return RedirectResponse(url=f"/student/elections/{id}/vote?error=session_expired", status_code=302)
+
+    error_key = request.query_params.get("error")
+    error_message = None
+    if error_key == "invalid_file":
+        error_message = "Invalid file format. Please upload a JPG, JPEG, or PNG image."
+    elif error_key == "session_expired":
+        error_message = "Your voting session has expired. Please select your candidate again."
+    elif error_key == "internal":
+        error_message = "An internal error occurred during verification. Please try again."
+
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "student_election_verify.html",
+        {
+            "request": request,
+            "election": election,
+            "user": user,
+            "csrf_token": csrf_token,
+            "error_message": error_message
+        }
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    return response
+
+@app.post("/student/elections/{id}/verify")
+async def submit_student_verification(
+    request: Request,
+    id: int,
+    verification_type: str = Form(...),
+    verification_file: UploadFile = File(...),
+    user = Depends(student_guard),
+    csrf_token = Depends(verify_csrf)
+):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/student/elections", status_code=302)
+
+    if verification_type not in ["SELFIE", "SIGNATURE"]:
+        return RedirectResponse(url=f"/student/elections/{id}/verify?error=internal", status_code=303)
+
+    file_path = save_verification_file(user["user_id"], id, verification_type, verification_file)
+    if not file_path:
+        return RedirectResponse(url=f"/student/elections/{id}/verify?error=invalid_file", status_code=303)
+
+    try:
+        with get_db_cursor() as cursor:
+            # 1. Validate session and check expiration
+            cursor.execute(
+                "SELECT candidate_application_id, expires_at FROM voting_sessions WHERE student_id = %s AND election_id = %s AND completed = 0",
+                (user["user_id"], id)
+            )
+            session = cursor.fetchone()
+
+            if not session or not session['candidate_application_id']:
+                return RedirectResponse(url=f"/student/elections/{id}/verify?error=internal", status_code=303)
+
+            expires_at = ensure_datetime(session['expires_at'])
+            if expires_at and expires_at < datetime.now(timezone.utc):
+                return RedirectResponse(url=f"/student/elections/{id}/vote?error=session_expired", status_code=303)
+
+            candidate_application_id = session['candidate_application_id']
+
+            # 2. Insert into votes table
+            cursor.execute(
+                "INSERT INTO votes (voter_id, election_id, candidate_id, voted_at) VALUES (%s, %s, %s, %s)",
+                (user["user_id"], id, candidate_application_id, datetime.now(timezone.utc))
+            )
+
+            # 3. Insert into vote_verifications table
+            cursor.execute(
+                "INSERT INTO vote_verifications (student_id, election_id, verification_type, file_path, uploaded_at) VALUES (%s, %s, %s, %s, %s)",
+                (user["user_id"], id, verification_type, file_path, datetime.now(timezone.utc))
+            )
+
+            # 4. Mark session completed
+            cursor.execute(
+                "UPDATE voting_sessions SET completed = 1 WHERE student_id = %s AND election_id = %s",
+                (user["user_id"], id)
+            )
+
+    except Exception as e:
+        logger.exception("Verification transaction failed")
+        return RedirectResponse(url=f"/student/elections/{id}/verify?error=internal", status_code=303)
+
+    return RedirectResponse(url=f"/student/elections/{id}?success=voted", status_code=303)
 
 @app.get("/profile", response_class=HTMLResponse)
 async def profile_page(request: Request, user = Depends(get_current_user)):
