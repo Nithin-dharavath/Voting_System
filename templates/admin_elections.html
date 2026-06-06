@@ -47,6 +47,9 @@
                         <td>
                             <div style="display: flex; gap: 0.5rem;">
                                 <a href="/admin/elections/{{ election.id }}" class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.75rem;">Edit</a>
+                                {% if election.status == 'ENDED' %}
+                                <a href="/admin/elections/{{ election.id }}/results" class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.75rem;">Results</a>
+                                {% endif %}
                                 <form action="/admin/elections/{{ election.id }}/delete" method="POST" onsubmit="return confirm('Are you sure you want to delete this election?');">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <button type="submit" class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; color: var(--error-color); border-color: var(--color-admin-error-bg);">Delete</button>

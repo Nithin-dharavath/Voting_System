@@ -106,7 +106,7 @@ def test_list_elections_admin(admin_client, mock_cursor):
     assert response.status_code == 200
     assert "Election 1" in response.text
     assert "Election 2" in response.text
-    mock_cursor.execute.assert_called_with("SELECT id, title, description, start_time, end_time, result_published FROM elections ORDER BY created_at DESC")
+    mock_cursor.execute.assert_called_with("SELECT id, title, description, start_time, end_time, status, result_published FROM elections ORDER BY created_at DESC")
 
 def test_create_election_page_admin(admin_client):
     response = admin_client.get("/admin/elections/create")

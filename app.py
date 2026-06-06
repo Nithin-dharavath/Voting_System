@@ -180,6 +180,33 @@ def get_approved_candidate_for_vote(candidate_application_id: int, election_id: 
         )
         return cursor.fetchone()
 
+def get_election_results(election_id: int):
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT
+                ca.id           AS candidate_application_id,
+                u.full_name     AS candidate_name,
+                u.department    AS department,
+                u.academic_year AS academic_year,
+                ca.manifesto    AS manifesto,
+                COUNT(v.candidate_id) AS vote_count
+            FROM candidate_applications ca
+            JOIN users u ON ca.user_id = u.user_id
+            LEFT JOIN votes v
+                ON v.candidate_id = ca.id AND v.election_id = ca.election_id
+            WHERE ca.election_id = %s AND ca.approval_status = 'APPROVED'
+            GROUP BY ca.id, u.full_name, u.department, u.academic_year, ca.manifesto
+            ORDER BY vote_count DESC, u.full_name ASC
+            """,
+            (election_id,)
+        )
+        rows = cursor.fetchall()
+    total = sum(r["vote_count"] for r in rows)
+    for r in rows:
+        r["percentage"] = (r["vote_count"] / total * 100) if total else 0.0
+    return rows, total
+
 def mark_voting_session_completed(user_id: int, election_id: int):
     try:
         with get_db_cursor() as cursor:
@@ -466,8 +493,10 @@ async def student_election_detail(request: Request, id: int, user = Depends(stud
     has_voted = has_user_voted(user['user_id'], id)
     success_message = None
     error_message = None
+    info_message = None
     success_key = request.query_params.get("success")
     error_key = request.query_params.get("error")
+    info_key = request.query_params.get("info")
 
     if success_key == "voted":
         success_message = "Your vote has been recorded."
@@ -481,6 +510,9 @@ async def student_election_detail(request: Request, id: int, user = Depends(stud
     elif error_key == "inactive":
         error_message = "Voting is only available while the election is active."
 
+    if info_key == "not_published":
+        info_message = "The results for this election have not been published yet."
+
     return templates.TemplateResponse(
         request,
         "student_election_detail.html",
@@ -491,7 +523,8 @@ async def student_election_detail(request: Request, id: int, user = Depends(stud
             "has_applied": has_applied,
             "has_voted": has_voted,
             "success_message": success_message,
-            "error_message": error_message
+            "error_message": error_message,
+            "info_message": info_message,
         }
     )
 
@@ -669,7 +702,7 @@ async def admin_dashboard(request: Request, user = Depends(admin_guard)):
 @app.get("/admin/elections", response_class=HTMLResponse)
 async def list_elections(request: Request, user = Depends(admin_guard)):
     with get_db_cursor() as cursor:
-        cursor.execute("SELECT id, title, description, start_time, end_time, result_published FROM elections ORDER BY created_at DESC")
+        cursor.execute("SELECT id, title, description, start_time, end_time, status, result_published FROM elections ORDER BY created_at DESC")
         elections = cursor.fetchall()
         for e in elections:
             e['start_time'] = ensure_datetime(e['start_time'])
@@ -1001,6 +1034,169 @@ async def admin_election_candidates(request: Request, id: int, user = Depends(ad
     )
     response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
     return response
+
+
+# ---------------------------------------------------------------------------
+# Election Results (admin + student)
+# ---------------------------------------------------------------------------
+
+@app.get("/admin/elections/{id}/results", response_class=HTMLResponse)
+async def admin_election_results(request: Request, id: int, user = Depends(admin_guard)):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/admin/elections", status_code=302)
+    if election["status"] != "ENDED":
+        return RedirectResponse(url=f"/admin/elections/{id}", status_code=302)
+
+    results, total_votes = get_election_results(id)
+    published = bool(election["result_published"])
+    info_message = None
+    if published:
+        info_message = "Results have been published to students."
+    elif request.query_params.get("success") == "published":
+        info_message = "Results have been published to students."
+
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "admin_election_results.html",
+        {
+            "request": request,
+            "user": user,
+            "election": election,
+            "results": results,
+            "total_votes": total_votes,
+            "published": published,
+            "info_message": info_message,
+            "csrf_token": csrf_token,
+        },
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    return response
+
+
+@app.post("/admin/elections/{id}/publish-results")
+async def publish_election_results(
+    request: Request,
+    id: int,
+    user = Depends(admin_guard),
+    csrf_token = Depends(verify_csrf),
+):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/admin/elections", status_code=303)
+    if election["status"] != "ENDED":
+        return RedirectResponse(url=f"/admin/elections/{id}", status_code=303)
+    if not election["result_published"]:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                "UPDATE elections SET result_published = 1 WHERE id = %s",
+                (id,),
+            )
+    return RedirectResponse(url=f"/admin/elections/{id}/results?success=published", status_code=303)
+
+
+@app.get("/student/elections/{id}/results", response_class=HTMLResponse)
+async def student_election_results(request: Request, id: int, user = Depends(student_guard)):
+    election = get_election_by_id(id)
+    if not election:
+        raise HTTPException(status_code=404, detail="Election not found")
+    if election["status"] != "ENDED" or not election["result_published"]:
+        return RedirectResponse(url=f"/student/elections/{id}?info=not_published", status_code=302)
+
+    results, total_votes = get_election_results(id)
+    return templates.TemplateResponse(
+        request,
+        "student_election_results.html",
+        {
+            "request": request,
+            "user": user,
+            "election": election,
+            "results": results,
+            "total_votes": total_votes,
+        },
+    )
+
+
+@app.get("/admin/results", response_class=HTMLResponse)
+async def admin_results_overview(request: Request, user = Depends(admin_guard)):
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, title, description, start_time, end_time, status, result_published
+            FROM elections
+            WHERE status = 'ENDED'
+            ORDER BY end_time DESC
+            """
+        )
+        elections = cursor.fetchall()
+        for e in elections:
+            e['start_time'] = ensure_datetime(e['start_time'])
+            e['end_time'] = ensure_datetime(e['end_time'])
+
+    election_results = []
+    for election in elections:
+        results, total_votes = get_election_results(election['id'])
+        election_results.append({
+            "election": election,
+            "results": results,
+            "total_votes": total_votes,
+        })
+
+    info_message = None
+    if request.query_params.get("success") == "published":
+        info_message = "Results have been published to students."
+
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "admin_results.html",
+        {
+            "request": request,
+            "user": user,
+            "election_results": election_results,
+            "info_message": info_message,
+            "csrf_token": csrf_token,
+        },
+    )
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    return response
+
+
+@app.get("/student/results", response_class=HTMLResponse)
+async def student_results_overview(request: Request, user = Depends(student_guard)):
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, title, description, start_time, end_time, status, result_published
+            FROM elections
+            WHERE status = 'ENDED' AND result_published = 1
+            ORDER BY end_time DESC
+            """
+        )
+        elections = cursor.fetchall()
+        for e in elections:
+            e['start_time'] = ensure_datetime(e['start_time'])
+            e['end_time'] = ensure_datetime(e['end_time'])
+
+    election_results = []
+    for election in elections:
+        results, total_votes = get_election_results(election['id'])
+        election_results.append({
+            "election": election,
+            "results": results,
+            "total_votes": total_votes,
+        })
+
+    return templates.TemplateResponse(
+        request,
+        "student_results.html",
+        {
+            "request": request,
+            "user": user,
+            "election_results": election_results,
+        },
+    )
 
 
 def save_verification_file(user_id: int, election_id: int, v_type: str, file: UploadFile) -> Optional[str]:

@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Election Results - Voting System{% endblock %}
+
+{% block content %}
+<div class="page-card">
+    <div class="admin-layout">
+        {% include 'partials/admin_sidebar.html' %}
+
+        <main class="admin-main">
+            <div class="dashboard-header">
+                <h1>Election Results</h1>
+                <p>Overview of all completed elections with vote tallies and publishing controls.</p>
+            </div>
+
+            {% if info_message %}
+            <div class="alert alert-success">{{ info_message }}</div>
+            {% endif %}
+
+            <div class="results-summary-grid">
+                <div class="results-summary-card">
+                    <h3>Completed Elections</h3>
+                    <div class="value">{{ election_results|length }}</div>
+                    <p style="font-size: 0.75rem; color: #94a3b8;">Elections with finalized tallies</p>
+                </div>
+                <div class="results-summary-card">
+                    <h3>Published</h3>
+                    <div class="value">{{ election_results|selectattr('election.result_published')|list|length }}</div>
+                    <p style="font-size: 0.75rem; color: #94a3b8;">Visible to students</p>
+                </div>
+                <div class="results-summary-card">
+                    <h3>Hidden</h3>
+                    <div class="value">{{ election_results|rejectattr('election.result_published')|list|length }}</div>
+                    <p style="font-size: 0.75rem; color: #94a3b8;">Awaiting publication</p>
+                </div>
+            </div>
+
+            {% if election_results %}
+            <div class="results-list">
+                {% for item in election_results %}
+                <div class="results-card">
+                    <div class="results-card-header">
+                        <div>
+                            <h3>{{ item.election.title }}</h3>
+                            <p class="results-card-meta">
+                                <span>🏁 Ended: {{ item.election.end_time.strftime('%B %d, %Y at %I:%M %p') if item.election.end_time else 'N/A' }}</span>
+                                <span class="results-meta-divider">•</span>
+                                <span>Total Votes: <strong>{{ item.total_votes }}</strong></span>
+                            </p>
+                        </div>
+                        <div class="results-card-badges">
+                            <span class="status-badge status-ended">ENDED</span>
+                            <span class="{{ 'badge-published' if item.election.result_published else 'badge-hidden' }}">
+                                {{ 'Published' if item.election.result_published else 'Hidden' }}
+                            </span>
+                        </div>
+                    </div>
+
+                    {% if item.results %}
+                    <div class="results-table-wrapper">
+                        <table class="activity-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">Rank</th>
+                                    <th>Candidate</th>
+                                    <th>Department</th>
+                                    <th style="width: 100px;">Votes</th>
+                                    <th style="width: 90px;">Share</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in item.results %}
+                                <tr class="{{ 'winner-row' if loop.first and r.vote_count > 0 }}">
+                                    <td>
+                                        {% if loop.first and r.vote_count > 0 %}
+                                        <span class="rank-badge rank-winner">🏆 {{ loop.index }}</span>
+                                        {% else %}
+                                        <span class="rank-badge">{{ loop.index }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td style="font-weight: 600;">{{ r.candidate_name }}</td>
+                                    <td>
+                                        <div>{{ r.department }}</div>
+                                        <div style="font-size: 0.75rem; color: var(--color-admin-slate);">{{ r.academic_year }}</div>
+                                    </td>
+                                    <td style="font-weight: 700; color: var(--primary-color);">{{ r.vote_count }}</td>
+                                    <td>
+                                        <div class="results-share">
+                                            <span class="results-share-value">{{ '%.1f'|format(r.percentage) }}%</span>
+                                            <div class="results-bar">
+                                                <div class="results-bar-fill {{ 'winner' if loop.first and r.vote_count > 0 }}" style="width: {{ '%.1f'|format(r.percentage) }}%;"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-error" style="margin: 0;">
+                        No approved candidates participated in this election.
+                    </div>
+                    {% endif %}
+
+                    <div class="results-card-footer">
+                        <a href="/admin/elections/{{ item.election.id }}/results" class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.8rem;">View Full Details</a>
+                        {% if not item.election.result_published %}
+                        <form action="/admin/elections/{{ item.election.id }}/publish-results" method="POST" onsubmit="return confirm('Publish these results to students? This action cannot be undone.');" style="margin: 0;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="btn-primary" style="width: auto; padding: 0.5rem 1.25rem; font-size: 0.8rem;">Publish Results</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 1rem; display: block; opacity: 0.5;"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                <h3 style="margin: 0 0 0.5rem 0; color: var(--primary-color);">No Completed Elections Yet</h3>
+                <p style="margin: 0; color: #94a3b8;">Results will appear here once an election ends.</p>
+            </div>
+            {% endif %}
+        </main>
+    </div>
+</div>
+{% endblock %}

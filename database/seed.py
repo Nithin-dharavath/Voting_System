@@ -79,6 +79,14 @@ def seed_database():
             "result_published": 0
         },
         {
+            "title": "Sports Captain 2025",
+            "description": "Election for the Sports Captain position.",
+            "start_time": now - datetime.timedelta(days=90),
+            "end_time": now - datetime.timedelta(days=89),
+            "status": "ENDED",
+            "result_published": 0
+        },
+        {
             "title": "Cultural Fest Lead 2025",
             "description": "Election for the Cultural Fest Lead.",
             "start_time": now - datetime.timedelta(days=60),
@@ -198,6 +206,79 @@ def seed_database():
 
                 query = "INSERT INTO candidate_applications (user_id, election_id, manifesto, approval_status, reviewed_by) VALUES (%s, %s, %s, %s, %s)"
                 cursor.executemany(query, apps)
+
+                # Approved candidates for the two ENDED elections so results pages
+                # have tallies to display.
+                # election_ids[2] = Sports Captain 2025 (ENDED, NOT published) -> shows Publish button
+                # election_ids[3] = Cultural Fest Lead 2025 (ENDED, published) -> shows badge
+                ended_apps = [
+                    (student_ids[0], election_ids[2], "Promoting athletics and team spirit across the campus.", "APPROVED", admin_id),
+                    (student_ids[1], election_ids[2], "Building inclusive sports programs for every student.", "APPROVED", admin_id),
+                    (student_ids[2], election_ids[2], "Driving excellence in competitive and recreational sports.", "APPROVED", admin_id),
+                    (student_ids[3], election_ids[3], "A vibrant cultural calendar that reflects every student voice.", "APPROVED", admin_id),
+                    (student_ids[0], election_ids[3], "Showcasing talent through festivals, workshops, and showcases.", "APPROVED", admin_id),
+                ]
+                cursor.executemany(query, ended_apps)
+
+                # 6. Insert vote_verifications + votes for the ENDED elections
+                # so the results pages have real tallies to count.
+                if table_exists(cursor, "vote_verifications") and table_exists(cursor, "votes"):
+                    print("Seeding votes and verifications for ENDED elections...")
+
+                    # Look up candidate_application ids per ENDED election, ordered
+                    # so vote distributions align with the candidate list order.
+                    def approved_cap_ids(election_id):
+                        cursor.execute(
+                            "SELECT id FROM candidate_applications WHERE election_id = %s AND approval_status = 'APPROVED' ORDER BY id",
+                            (election_id,)
+                        )
+                        return [row['id'] for row in cursor.fetchall()]
+
+                    sports_cap_ids = approved_cap_ids(election_ids[2])
+                    cultural_cap_ids = approved_cap_ids(election_ids[3])
+
+                    # Vote counts per candidate (one slot per approved candidate).
+                    # We have 4 student voters; each can cast at most one vote
+                    # per election, so totals per election are capped at 4.
+                    # Sports Captain 2025 -> 3 candidates, totals 4
+                    # Cultural Fest Lead 2025 -> 2 candidates, totals 4
+                    distributions = {
+                        election_ids[2]: [2, 1, 1],
+                        election_ids[3]: [2, 2],
+                    }
+                    cap_ids_by_election = {
+                        election_ids[2]: sports_cap_ids,
+                        election_ids[3]: cultural_cap_ids,
+                    }
+
+                    verifications = []
+                    votes = []
+                    voted_at = now - datetime.timedelta(days=89)
+                    voter_pool = list(student_ids)
+                    voter_cursor = 0
+
+                    for election_id, cap_ids in cap_ids_by_election.items():
+                        for cap_id, count in zip(cap_ids, distributions[election_id]):
+                            for _ in range(count):
+                                voter_id = voter_pool[voter_cursor % len(voter_pool)]
+                                voter_cursor += 1
+                                verifications.append((
+                                    voter_id, election_id, "FILE",
+                                    f"/uploads/verifications/v_{voter_id}_{election_id}.pdf",
+                                    voted_at,
+                                ))
+                                votes.append((voter_id, election_id, cap_id, voted_at))
+
+                    if verifications:
+                        cursor.executemany(
+                            "INSERT INTO vote_verifications (student_id, election_id, verification_type, file_path, uploaded_at) VALUES (%s, %s, %s, %s, %s)",
+                            verifications
+                        )
+                    if votes:
+                        cursor.executemany(
+                            "INSERT INTO votes (voter_id, election_id, candidate_id, voted_at) VALUES (%s, %s, %s, %s)",
+                            votes
+                        )
 
             print("\n--- Database seeding completed successfully! ---")
 

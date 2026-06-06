@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Results - {{ election.title }} - Online Voting System{% endblock %}
+
+{% block content %}
+<div class="page-card election-detail-card">
+    <div class="dashboard-header">
+        <a href="/student/elections/{{ election.id }}" class="back-link">&larr; Back to Election</a>
+        <h1>{{ election.title }} - Results</h1>
+        <span class="status-badge status-ended">ENDED</span>
+    </div>
+
+    <div class="election-details">
+        <div class="detail-item">
+            <p>{{ total_votes }} {{ 'vote was' if total_votes == 1 else 'votes were' }} cast in this election.</p>
+        </div>
+
+        {% if results %}
+        <div class="table-responsive" style="margin-top: 1rem;">
+            <table class="activity-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Candidate</th>
+                        <th>Department</th>
+                        <th>Manifesto</th>
+                        <th>Votes</th>
+                        <th>%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in results %}
+                    <tr>
+                        <td style="font-weight: 600;">{{ loop.index }}</td>
+                        <td style="font-weight: 600;">{{ r.candidate_name }}</td>
+                        <td>{{ r.department }}</td>
+                        <td style="max-width: 360px;">{{ r.manifesto }}</td>
+                        <td style="font-weight: 600;">{{ r.vote_count }}</td>
+                        <td>{{ '%.1f'|format(r.percentage) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-error" style="margin-top: 1rem;">
+            No approved candidates participated in this election.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
