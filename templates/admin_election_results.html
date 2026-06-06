@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Election Results - Voting System{% endblock %}
+
+{% block content %}
+<div class="page-card">
+    <div class="admin-layout">
+        {% include 'partials/admin_sidebar.html' %}
+
+        <main class="admin-main">
+            <div class="dashboard-header">
+                <a href="/admin/elections" class="back-link">&larr; Back to Elections</a>
+                <h1>Election Results</h1>
+                <p>Tallies and publishing controls for <strong>{{ election.title }}</strong>.</p>
+            </div>
+
+            {% if info_message %}
+            <div class="alert alert-success">{{ info_message }}</div>
+            {% endif %}
+
+            <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem;">
+                <span class="status-badge status-ended">ENDED</span>
+                <span class="{{ 'badge-published' if published else 'badge-hidden' }}">
+                    {{ 'Published to Students' if published else 'Hidden from Students' }}
+                </span>
+            </div>
+
+            <div style="margin-bottom: 1.25rem; color: var(--color-admin-slate);">
+                <strong>Total votes cast:</strong> {{ total_votes }}
+            </div>
+
+            {% if results %}
+            <table class="activity-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Candidate</th>
+                        <th>Department / Year</th>
+                        <th>Manifesto</th>
+                        <th>Votes</th>
+                        <th>%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in results %}
+                    <tr>
+                        <td style="font-weight: 600;">{{ loop.index }}</td>
+                        <td style="font-weight: 600;">{{ r.candidate_name }}</td>
+                        <td>
+                            <div>{{ r.department }}</div>
+                            <div style="font-size: 0.8rem; color: var(--color-admin-slate);">{{ r.academic_year }}</div>
+                        </td>
+                        <td style="max-width: 360px;">{{ r.manifesto }}</td>
+                        <td style="font-weight: 600;">{{ r.vote_count }}</td>
+                        <td>{{ '%.1f'|format(r.percentage) }}%</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="alert alert-error" style="background: var(--color-admin-warning-bg); color: var(--color-admin-warning-text); border-color: var(--color-admin-warning-border);">
+                No approved candidates participated in this election.
+            </div>
+            {% endif %}
+
+            <div class="action-group" style="margin-top: 2rem;">
+                {% if not published %}
+                <form action="/admin/elections/{{ election.id }}/publish-results" method="POST" onsubmit="return confirm('Publish these results to students? This action cannot be undone.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn-primary" style="width: auto; padding: 0.75rem 2rem;">Publish Results</button>
+                </form>
+                <span style="color: var(--color-admin-slate); font-size: 0.9rem;">This will make results visible to students.</span>
+                {% else %}
+                <span class="badge-published">Results Published</span>
+                <span style="color: var(--color-admin-slate); font-size: 0.9rem;">Unpublishing is not available in this step.</span>
+                {% endif %}
+                <a href="/admin/elections/{{ election.id }}" class="btn-secondary">Back to Edit</a>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}

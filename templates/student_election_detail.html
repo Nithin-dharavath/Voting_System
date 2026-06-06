@@ -20,6 +20,10 @@
     <div class="alert alert-error">{{ error_message }}</div>
     {% endif %}
 
+    {% if info_message %}
+    <div class="alert alert-success">{{ info_message }}</div>
+    {% endif %}
+
     <div class="election-details">
         <div class="detail-item">
             <label>Description</label>
@@ -51,8 +55,10 @@
                 <a href="/student/elections/{{ election.id }}/vote" class="btn-primary">Vote Now</a>
             {% elif election.status == 'ACTIVE' and has_voted %}
                 <span class="btn-secondary action-static">Vote already recorded</span>
-            {% elif election.status == 'ENDED' %}
-                <a href="/student/results/{{ election.id }}" class="btn-primary">View Results</a>
+            {% elif election.status == 'ENDED' and election.result_published %}
+                <a href="/student/elections/{{ election.id }}/results" class="btn-primary">View Results</a>
+            {% elif election.status == 'ENDED' and not election.result_published %}
+                <span class="btn-secondary action-static">Results pending publication</span>
             {% endif %}
         </div>
     </div>

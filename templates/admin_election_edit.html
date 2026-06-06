@@ -42,6 +42,17 @@
                 <div class="action-group">
                     <button type="submit" class="btn-primary" style="width: auto; padding: 0.75rem 2rem;">Update Election</button>
                     <a href="/admin/elections" class="btn-secondary">Cancel</a>
+                    {% if election.status == 'ENDED' %}
+                    <a href="/admin/elections/{{ election.id }}/results" class="btn-secondary">View Results</a>
+                    {% if not election.result_published %}
+                    <form action="/admin/elections/{{ election.id }}/publish-results" method="POST" onsubmit="return confirm('Publish these results to students? This action cannot be undone.');" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <button type="submit" class="btn-primary" style="width: auto; padding: 0.75rem 2rem;">Publish Results</button>
+                    </form>
+                    {% else %}
+                    <span class="badge-published">Results Published</span>
+                    {% endif %}
+                    {% endif %}
                 </div>
             </form>
         </main>
