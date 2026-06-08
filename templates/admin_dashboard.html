@@ -10,15 +10,7 @@
         </div>
 
         <div class="admin-layout">
-            <aside class="admin-sidebar">
-                <h3>Management</h3>
-                <ul class="sidebar-nav">
-                    <li><a href="/admin/elections" class="active">Elections</a></li>
-                    <li><a href="/admin/candidates">Candidates</a></li>
-                    <li><a href="/admin/candidates/approved">Approved Candidates</a></li>
-                    <li><a href="/admin/audit">Audit Logs</a></li>
-                </ul>
-            </aside>
+            {% include 'partials/admin_sidebar.html' %}
 
             <main class="admin-main">
                 <div class="dashboard-grid">
@@ -50,21 +42,28 @@
                             </tr>
                         </thead>
                         <tbody>
+                            {% for act in recent_activity %}
                             <tr>
-                                <td>student_1@edu.com</td>
-                                <td>Applied for candidacy</td>
-                                <td>2 mins ago</td>
+                                <td>{{ act.full_name }}</td>
+                                <td>
+                                    {% if act.action_type == 'candidacy' %}
+                                        Applied for candidacy
+                                    {% elif act.action_type == 'vote' %}
+                                        Submitted vote
+                                    {% elif act.action_type == 'election_created' %}
+                                        Created election
+                                    {% else %}
+                                        {{ act.action_type }}
+                                    {% endif %}
+                                </td>
+                                <td>{{ act.acted_at.strftime('%Y-%m-%d %H:%M') if act.acted_at else 'N/A' }}</td>
                             </tr>
+                            {% endfor %}
+                            {% if not recent_activity %}
                             <tr>
-                                <td>admin_main@edu.com</td>
-                                <td>Created "Student Council 2026"</td>
-                                <td>1 hour ago</td>
+                                <td colspan="3" style="text-align: center; color: #94a3b8;">No recent activity</td>
                             </tr>
-                            <tr>
-                                <td>student_42@edu.com</td>
-                                <td>Submitted vote</td>
-                                <td>3 hours ago</td>
-                            </tr>
+                            {% endif %}
                         </tbody>
                     </table>
                 </div>

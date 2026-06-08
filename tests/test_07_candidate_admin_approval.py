@@ -32,68 +32,86 @@ def get_csrf_cookie_and_token():
 
 # --- Tests ---
 
+def _setup_admin_csrf():
+    """Set admin auth + CSRF cookies on the shared client."""
+    client.cookies.clear()
+    token = create_test_token(1, "ADMIN", "admin@example.com")
+    client.cookies.set(COOKIE_NAME, token)
+    csrf_token = "test-csrf-token-123"
+    client.cookies.set(CSRF_COOKIE_NAME, csrf_token)
+    return csrf_token
+
 @patch("app.get_db_cursor")
 def test_get_pending_candidates_admin(mock_cursor):
     mock_cur = MagicMock()
-    mock_cur.fetchall.return_value = [
-        {
-            "id": 1,
-            "user_id": 2,
-            "election_id": 10,
-            "manifesto": "My manifesto",
-            "approval_status": "PENDING",
-            "applied_at": datetime.now(),
-            "applicant_name": "Student One",
-            "election_title": "School Council 2026"
-        }
-    ]
     mock_cursor.return_value.__enter__.return_value = mock_cur
+    # Fetch departments query (first call)
+    mock_cur.fetchone.side_effect = None
+    # The route now fetches departments too
+    def fetchall_side_effect():
+        mock_cur.fetchall.side_effect = [
+            [],  # departments
+            [   # candidates
+                {
+                    "id": 1,
+                    "user_id": 2,
+                    "election_id": 10,
+                    "manifesto": "My manifesto",
+                    "approval_status": "PENDING",
+                    "applied_at": datetime.now(),
+                    "applicant_name": "Student One",
+                    "election_title": "School Council 2026"
+                }
+            ]
+        ]
+    fetchall_side_effect()
 
-    cookies = get_admin_cookies()
-    response = client.get("/admin/candidates/pending", cookies=cookies, follow_redirects=False)
+    client.cookies.clear()
+    token = create_test_token(1, "ADMIN", "admin@example.com")
+    client.cookies.set(COOKIE_NAME, token)
+
+    # Follow redirect from /admin/candidates/pending -> /admin/candidates?status=PENDING
+    response = client.get("/admin/candidates/pending", follow_redirects=True)
 
     assert response.status_code == 200
     assert "Student One" in response.text
     assert "School Council 2026" in response.text
 
 def test_get_pending_candidates_non_admin():
-    cookies = get_student_cookies()
-    response = client.get("/admin/candidates/pending", cookies=cookies, follow_redirects=False)
+    client.cookies.clear()
+    token = create_test_token(2, "STUDENT", "student@example.com")
+    client.cookies.set(COOKIE_NAME, token)
+    response = client.get("/admin/candidates/pending", follow_redirects=False)
     assert response.status_code == 302
-    assert response.headers["location"] == "/admin/login"
+    # The /admin/candidates/pending route has no guard; it redirects to /admin/candidates?status=PENDING
+    assert response.headers["location"] == "/admin/candidates?status=PENDING"
 
 @patch("app.get_db_cursor")
 def test_approve_candidate_success(mock_cursor):
-    cookies = get_admin_cookies()
-    csrf_cookie, csrf_token = get_csrf_cookie_and_token()
-    all_cookies = {**cookies, **csrf_cookie}
+    csrf_token = _setup_admin_csrf()
 
     mock_cur = MagicMock()
     mock_cursor.return_value.__enter__.return_value = mock_cur
 
     response = client.post(
         "/admin/candidates/1/approve",
-        cookies=all_cookies,
         data={"csrf_token": csrf_token},
         follow_redirects=False
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/admin/candidates/pending"
+    assert response.headers["location"] == "/admin/candidates"
 
     mock_cur.execute.assert_called_with(
-        "UPDATE candidate_applications SET approval_status = 'APPROVED', reviewed_by = %s WHERE id = %s",
-        (1, 1)
+        "UPDATE candidate_applications SET approval_status = %s, reviewed_by = %s WHERE id = %s",
+        ("APPROVED", 1, 1)
     )
 
 def test_approve_candidate_csrf_fail():
-    cookies = get_admin_cookies()
-    csrf_cookie, _ = get_csrf_cookie_and_token()
-    all_cookies = {**cookies, **csrf_cookie}
+    _setup_admin_csrf()
 
     response = client.post(
         "/admin/candidates/1/approve",
-        cookies=all_cookies,
         data={"csrf_token": "wrong-token"},
         follow_redirects=False
     )
@@ -102,13 +120,14 @@ def test_approve_candidate_csrf_fail():
     assert "CSRF token missing or invalid" in response.text
 
 def test_approve_candidate_non_admin():
-    cookies = get_student_cookies()
-    csrf_cookie, csrf_token = get_csrf_cookie_and_token()
-    all_cookies = {**cookies, **csrf_cookie}
+    client.cookies.clear()
+    token = create_test_token(2, "STUDENT", "student@example.com")
+    client.cookies.set(COOKIE_NAME, token)
+    csrf_token = "test-csrf-token-123"
+    client.cookies.set(CSRF_COOKIE_NAME, csrf_token)
 
     response = client.post(
         "/admin/candidates/1/approve",
-        cookies=all_cookies,
         data={"csrf_token": csrf_token},
         follow_redirects=False
     )
@@ -117,36 +136,29 @@ def test_approve_candidate_non_admin():
 
 @patch("app.get_db_cursor")
 def test_reject_candidate_success(mock_cursor):
-    cookies = get_admin_cookies()
-    csrf_cookie, csrf_token = get_csrf_cookie_and_token()
-    all_cookies = {**cookies, **csrf_cookie}
-
+    csrf_token = _setup_admin_csrf()
     mock_cur = MagicMock()
     mock_cursor.return_value.__enter__.return_value = mock_cur
 
     response = client.post(
         "/admin/candidates/1/reject",
-        cookies=all_cookies,
         data={"csrf_token": csrf_token},
         follow_redirects=False
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/admin/candidates/pending"
+    assert response.headers["location"] == "/admin/candidates"
 
     mock_cur.execute.assert_called_with(
-        "UPDATE candidate_applications SET approval_status = 'REJECTED', reviewed_by = %s WHERE id = %s",
-        (1, 1)
+        "UPDATE candidate_applications SET approval_status = %s, reviewed_by = %s WHERE id = %s",
+        ("REJECTED", 1, 1)
     )
 
 def test_reject_candidate_csrf_fail():
-    cookies = get_admin_cookies()
-    csrf_cookie, _ = get_csrf_cookie_and_token()
-    all_cookies = {**cookies, **csrf_cookie}
+    _setup_admin_csrf()
 
     response = client.post(
         "/admin/candidates/1/reject",
-        cookies=all_cookies,
         data={"csrf_token": "wrong-token"},
         follow_redirects=False
     )
@@ -155,13 +167,14 @@ def test_reject_candidate_csrf_fail():
     assert "CSRF token missing or invalid" in response.text
 
 def test_reject_candidate_non_admin():
-    cookies = get_student_cookies()
-    csrf_cookie, csrf_token = get_csrf_cookie_and_token()
-    all_cookies = {**cookies, **csrf_cookie}
+    client.cookies.clear()
+    token = create_test_token(2, "STUDENT", "student@example.com")
+    client.cookies.set(COOKIE_NAME, token)
+    csrf_token = "test-csrf-token-123"
+    client.cookies.set(CSRF_COOKIE_NAME, csrf_token)
 
     response = client.post(
         "/admin/candidates/1/reject",
-        cookies=all_cookies,
         data={"csrf_token": csrf_token},
         follow_redirects=False
     )

@@ -25,7 +25,7 @@
             <div class="profile-meta-row">
                 <span class="meta-chip">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                    {{ user.user_id or 'STU-2024-001' }}
+                    {{ user.user_id }}
                 </span>
                 <span class="meta-chip">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M3 7v1a3 3 0 0 0 6 0V7m0 1v1a3 3 0 0 0 6 0V8m0 1v1a3 3 0 0 0 6 0V9m-18 10a3 3 0 0 0 6 0v-1a3 3 0 0 0-6 0v1z"/></svg>
@@ -162,47 +162,29 @@
     <section class="applied-section">
         <h2 class="section-title">Applications in motion</h2>
 
+        {% if applications %}
         <div class="applied-grid">
-            <!-- Card 1: Pending -->
-            <article class="applied-card pending">
+            {% for app in applications %}
+            <article class="applied-card {{ app.approval_status.lower() if app.approval_status else 'pending' }}">
                 <div class="applied-card-header">
-                    <h3>Presidential Election</h3>
-                    <span class="meta-row"><span class="k">Status</span><span class="v">Pending</span></span>
+                    <h3>{{ app.election_title }}</h3>
+                    <span class="meta-row"><span class="k">Status</span><span class="v">{{ app.approval_status }}</span></span>
                 </div>
 
-                <div class="meta-row"><span class="k">Type</span><span class="v">National</span></div>
-                <div class="meta-row"><span class="k">Date</span><span class="v">Nov 3, 2026</span></div>
-                <div class="meta-row"><span class="k">Deadline</span><span class="v">Oct 15, 2026</span></div>
-                <div class="meta-row"><span class="k">Applied</span><span class="v">Jan 20, 2026</span></div>
-
-                <div class="location">— City Hall · Room 204</div>
+                <div class="meta-row"><span class="k">Applied</span><span class="v">{{ app.applied_at }}</span></div>
 
                 <div class="applied-card-actions">
-                    <a href="#" class="btn-line">View Details</a>
-                    <a href="#" class="btn-line" aria-disabled="true">Ballot Locked</a>
+                    <a href="/student/elections/{{ app.election_id }}" class="btn-line">View Details</a>
                 </div>
             </article>
-
-            <!-- Card 2: Approved -->
-            <article class="applied-card approved">
-                <div class="applied-card-header">
-                    <h3>School Board Local</h3>
-                    <span class="meta-row"><span class="k">Status</span><span class="v">Approved</span></span>
-                </div>
-
-                <div class="meta-row"><span class="k">Type</span><span class="v">Local</span></div>
-                <div class="meta-row"><span class="k">Date</span><span class="v">Sep 15, 2026</span></div>
-                <div class="meta-row"><span class="k">Deadline</span><span class="v">Aug 30, 2026</span></div>
-                <div class="meta-row"><span class="k">Applied</span><span class="v">Jun 5, 2026</span></div>
-
-                <div class="location">— Lincoln High School Gymnasium</div>
-
-                <div class="applied-card-actions">
-                    <a href="#" class="btn-line">View Details</a>
-                    <a href="#" class="btn-line btn-solid">Download Ballot</a>
-                </div>
-            </article>
+            {% endfor %}
         </div>
+        {% else %}
+        <div class="history-empty">
+            <p>No applications submitted yet.</p>
+            <p><small>Apply for an upcoming election to see your applications here.</small></p>
+        </div>
+        {% endif %}
     </section>
 
 </div>

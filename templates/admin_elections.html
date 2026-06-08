@@ -40,8 +40,8 @@
                             <span style="font-size: 0.8rem; color: var(--color-admin-slate);">End:</span> {{ election.end_time.strftime('%Y-%m-%d %H:%M') }}
                         </td>
                         <td>
-                            <span class="{{ 'badge-published' if election.result_published else 'badge-hidden' }}">
-                                {{ 'Published' if election.result_published else 'Hidden' }}
+                            <span class="status-badge status-{{ election.status.lower() }}">
+                                {{ election.status }}
                             </span>
                         </td>
                         <td>

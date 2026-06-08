@@ -47,6 +47,16 @@ def format_datetime_simple(dt):
     dt_obj = ensure_datetime(dt)
     return dt_obj.strftime('%Y-%m-%d %H:%M') if dt_obj else None
 
+def compute_election_status(start_time, end_time):
+    now = datetime.now(timezone.utc)
+    start = ensure_datetime(start_time)
+    end = ensure_datetime(end_time)
+    if now < start:
+        return 'UPCOMING'
+    elif now >= end:
+        return 'ENDED'
+    return 'ACTIVE'
+
 
 app = FastAPI()
 
@@ -131,6 +141,7 @@ def get_election_by_id(election_id: int):
         if election:
             election['start_time'] = ensure_datetime(election['start_time'])
             election['end_time'] = ensure_datetime(election['end_time'])
+            election['status'] = compute_election_status(election['start_time'], election['end_time'])
         return election
 
 def has_user_applied(user_id: int, election_id: int) -> bool:
@@ -443,20 +454,46 @@ async def logout_user():
 async def student_dashboard(request: Request, user = Depends(get_current_user)):
     if not user or user['role'].upper() != 'STUDENT':
         return RedirectResponse(url="/login", status_code=302)
+    with get_db_cursor() as cursor:
+        try:
+            cursor.execute("SELECT COUNT(*) as count FROM elections WHERE start_time <= NOW() AND end_time > NOW()")
+            active_count = cursor.fetchone()['count']
+        except Exception:
+            active_count = 0
+        try:
+            cursor.execute(
+                "SELECT approval_status FROM candidate_applications WHERE user_id = %s ORDER BY applied_at DESC LIMIT 1",
+                (user['user_id'],)
+            )
+            row = cursor.fetchone()
+            candidacy_status = row['approval_status'] if row else None
+        except Exception:
+            candidacy_status = None
+        try:
+            cursor.execute("SELECT COUNT(*) as count FROM votes WHERE voter_id = %s", (user['user_id'],))
+            votes_cast = cursor.fetchone()['count']
+        except Exception:
+            votes_cast = 0
     return templates.TemplateResponse(
         request=request,
         name="student_dashboard.html",
-        context={"user": user}
+        context={
+            "user": user,
+            "active_count": active_count,
+            "candidacy_status": candidacy_status,
+            "votes_cast": votes_cast
+        }
     )
 
 @app.get("/student/elections", response_class=HTMLResponse)
 async def student_elections_list(request: Request, user = Depends(student_guard)):
     with get_db_cursor() as cursor:
-        cursor.execute("SELECT id, title, description, start_time, end_time, status FROM elections ORDER BY start_time ASC")
+        cursor.execute("SELECT id, title, description, start_time, end_time FROM elections ORDER BY start_time ASC")
         elections = cursor.fetchall()
         for e in elections:
             e['start_time'] = ensure_datetime(e['start_time'])
             e['end_time'] = ensure_datetime(e['end_time'])
+            e['status'] = compute_election_status(e['start_time'], e['end_time'])
 
     active = [e for e in elections if e['status'] == 'ACTIVE']
     upcoming = [e for e in elections if e['status'] == 'UPCOMING']
@@ -471,11 +508,12 @@ async def student_elections_list(request: Request, user = Depends(student_guard)
 @app.get("/student/elections/apply", response_class=HTMLResponse)
 async def student_election_apply_list(request: Request, user = Depends(student_guard)):
     with get_db_cursor() as cursor:
-        cursor.execute("SELECT id, title, description, start_time, end_time, status FROM elections WHERE status = 'UPCOMING' ORDER BY start_time ASC")
+        cursor.execute("SELECT id, title, description, start_time, end_time FROM elections WHERE start_time > NOW() ORDER BY start_time ASC")
         upcoming = cursor.fetchall()
         for e in upcoming:
             e['start_time'] = ensure_datetime(e['start_time'])
             e['end_time'] = ensure_datetime(e['end_time'])
+            e['status'] = 'UPCOMING'
 
     return templates.TemplateResponse(
         request,
@@ -675,7 +713,7 @@ async def admin_dashboard(request: Request, user = Depends(admin_guard)):
             total_students = 0
 
         try:
-            cursor.execute("SELECT COUNT(*) as count FROM elections WHERE status = 'ACTIVE'")
+            cursor.execute("SELECT COUNT(*) as count FROM elections WHERE start_time <= NOW() AND end_time > NOW()")
             active_elections = cursor.fetchone()['count']
         except Exception:
             active_elections = 0
@@ -686,6 +724,28 @@ async def admin_dashboard(request: Request, user = Depends(admin_guard)):
         except Exception:
             pending_apps = 0
 
+        try:
+            cursor.execute("""
+                (SELECT u.full_name, 'candidacy' as action_type, ca.applied_at as acted_at
+                 FROM candidate_applications ca
+                 JOIN users u ON ca.user_id = u.user_id
+                 ORDER BY ca.applied_at DESC LIMIT 5)
+                UNION ALL
+                (SELECT u.full_name, 'vote' as action_type, v.voted_at as acted_at
+                 FROM votes v
+                 JOIN users u ON v.voter_id = u.user_id
+                 ORDER BY v.voted_at DESC LIMIT 5)
+                UNION ALL
+                (SELECT u.full_name, 'election_created' as action_type, e.created_at as acted_at
+                 FROM elections e
+                 JOIN users u ON e.created_by = u.user_id
+                 ORDER BY e.created_at DESC LIMIT 5)
+                ORDER BY acted_at DESC LIMIT 10
+            """)
+            recent_activity = cursor.fetchall()
+        except Exception:
+            recent_activity = []
+
     return templates.TemplateResponse(
         request=request,
         name="admin_dashboard.html",
@@ -695,7 +755,8 @@ async def admin_dashboard(request: Request, user = Depends(admin_guard)):
                 "total_students": total_students,
                 "active_elections": active_elections,
                 "pending_apps": pending_apps
-            }
+            },
+            "recent_activity": recent_activity
         }
     )
 
@@ -707,6 +768,7 @@ async def list_elections(request: Request, user = Depends(admin_guard)):
         for e in elections:
             e['start_time'] = ensure_datetime(e['start_time'])
             e['end_time'] = ensure_datetime(e['end_time'])
+            e['status'] = compute_election_status(e['start_time'], e['end_time'])
 
     success_key = request.query_params.get("success")
     success_message = SUCCESS_MESSAGE_MAP.get(success_key, None) if success_key else None
@@ -768,9 +830,10 @@ async def create_election(
             response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
             return response
 
+        status = compute_election_status(s_time, e_time)
         with get_db_cursor() as cursor:
-            query = "INSERT INTO elections (title, description, start_time, end_time, created_by) VALUES (%s, %s, %s, %s, %s)"
-            cursor.execute(query, (title, description, s_time, e_time, user['user_id']))
+            query = "INSERT INTO elections (title, description, start_time, end_time, status, created_by) VALUES (%s, %s, %s, %s, %s, %s)"
+            cursor.execute(query, (title, description, s_time, e_time, status, user['user_id']))
 
         return RedirectResponse(url="/admin/elections?success=created", status_code=303)
 
@@ -838,9 +901,10 @@ async def update_election(
             response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
             return response
 
+        status = compute_election_status(s_time, e_time)
         with get_db_cursor() as cursor:
-            query = "UPDATE elections SET title = %s, description = %s, start_time = %s, end_time = %s WHERE id = %s"
-            cursor.execute(query, (title, description, s_time, e_time, id))
+            query = "UPDATE elections SET title = %s, description = %s, start_time = %s, end_time = %s, status = %s WHERE id = %s"
+            cursor.execute(query, (title, description, s_time, e_time, status, id))
 
         return RedirectResponse(url="/admin/elections?success=updated", status_code=303)
 
@@ -1125,7 +1189,7 @@ async def admin_results_overview(request: Request, user = Depends(admin_guard)):
             """
             SELECT id, title, description, start_time, end_time, status, result_published
             FROM elections
-            WHERE status = 'ENDED'
+            WHERE end_time <= NOW()
             ORDER BY end_time DESC
             """
         )
@@ -1133,6 +1197,7 @@ async def admin_results_overview(request: Request, user = Depends(admin_guard)):
         for e in elections:
             e['start_time'] = ensure_datetime(e['start_time'])
             e['end_time'] = ensure_datetime(e['end_time'])
+            e['status'] = compute_election_status(e['start_time'], e['end_time'])
 
     election_results = []
     for election in elections:
@@ -1170,7 +1235,7 @@ async def student_results_overview(request: Request, user = Depends(student_guar
             """
             SELECT id, title, description, start_time, end_time, status, result_published
             FROM elections
-            WHERE status = 'ENDED' AND result_published = 1
+            WHERE end_time <= NOW() AND result_published = 1
             ORDER BY end_time DESC
             """
         )
@@ -1178,6 +1243,7 @@ async def student_results_overview(request: Request, user = Depends(student_guar
         for e in elections:
             e['start_time'] = ensure_datetime(e['start_time'])
             e['end_time'] = ensure_datetime(e['end_time'])
+            e['status'] = compute_election_status(e['start_time'], e['end_time'])
 
     election_results = []
     for election in elections:
@@ -1359,11 +1425,23 @@ async def profile_page(request: Request, user = Depends(get_current_user)):
     if not user_data:
         return RedirectResponse(url="/login", status_code=302)
 
+    with get_db_cursor() as cursor:
+        cursor.execute("""
+            SELECT ca.id, ca.election_id, ca.approval_status, ca.applied_at, e.title as election_title
+            FROM candidate_applications ca
+            JOIN elections e ON ca.election_id = e.id
+            WHERE ca.user_id = %s
+            ORDER BY ca.applied_at DESC
+        """, (user['user_id'],))
+        applications = cursor.fetchall()
+        for app in applications:
+            app['applied_at'] = format_datetime_simple(app['applied_at'])
+
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "profile.html",
-        {"request": request, "user": user_data, "csrf_token": csrf_token}
+        {"request": request, "user": user_data, "csrf_token": csrf_token, "applications": applications}
     )
     response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
     return response

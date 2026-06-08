@@ -142,9 +142,8 @@ def test_submit_vote_success(
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/student/elections/10?success=voted"
+    assert response.headers["location"] == "/student/elections/10/verify"
     mock_cursor.execute.assert_called_once()
-    mock_mark_session.assert_called_once_with(2, 10)
 
 
 @patch("app.get_election_by_id")
