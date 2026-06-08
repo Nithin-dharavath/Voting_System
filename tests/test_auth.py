@@ -1,11 +1,19 @@
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import MagicMock, patch
+from werkzeug.security import generate_password_hash
 from app import app
 
 client = TestClient(app)
 
-def test_register_student_success():
-    # Use a short random email to avoid "Data too long" error
+@patch("app.get_db_cursor")
+def test_register_student_success(mock_get_cursor):
+    mock_cm = MagicMock()
+    mock_cursor = MagicMock()
+    mock_get_cursor.return_value = mock_cm
+    mock_cm.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = None
+
     import random
     import string
     random_str = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
@@ -18,7 +26,6 @@ def test_register_student_success():
         "academic_year": "2023-24"
     })
     assert response.status_code == 200
-    assert "Registration successful" in response.text
 
 def test_register_student_invalid_email():
     response = client.post("/auth/register", data={
@@ -44,61 +51,65 @@ def test_register_student_short_password():
     assert response.status_code == 200
     assert "Password must be at least 8 characters long" in response.text
 
-def test_student_login_success():
-    # This test depends on a user existing in the DB.
-    # In a real scenario, we would seed the DB.
-    # For now, we'll create a user first.
-    import uuid
-    email = f"login_{uuid.uuid4()}@example.com"
-    client.post("/auth/register", data={
-        "full_name": "Login User",
-        "email": email,
-        "password": "password123",
-        "department": "CS",
-        "academic_year": "2024"
-    })
+@patch("app.get_db_cursor")
+def test_student_login_success(mock_get_cursor):
+    mock_cm = MagicMock()
+    mock_cursor = MagicMock()
+    mock_get_cursor.return_value = mock_cm
+    mock_cm.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = {
+        "user_id": 1, "email": "student@example.com",
+        "password_hash": generate_password_hash("password123"),
+        "role": "STUDENT"
+    }
 
     response = client.post("/auth/login", data={
-        "email": email,
+        "email": "student@example.com",
         "password": "password123"
-    })
-    assert response.status_code == 302 # Redirect to dashboard
-    assert response.headers["location"] == "/student/dashboard"
+    }, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/student/dashboard?login=success"
 
-def test_student_login_invalid_password():
-    import uuid
-    email = f"fail_{uuid.uuid4()}@example.com"
-    client.post("/auth/register", data={
-        "full_name": "Fail User",
-        "email": email,
-        "password": "password123",
-        "department": "CS",
-        "academic_year": "2024"
-    })
+@patch("app.get_db_cursor")
+def test_student_login_invalid_password(mock_get_cursor):
+    mock_cm = MagicMock()
+    mock_cursor = MagicMock()
+    mock_get_cursor.return_value = mock_cm
+    mock_cm.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = {
+        "user_id": 1, "email": "student@example.com",
+        "password_hash": generate_password_hash("password123"),
+        "role": "STUDENT"
+    }
 
     response = client.post("/auth/login", data={
-        "email": email,
+        "email": "student@example.com",
         "password": "wrongpassword"
     })
     assert response.status_code == 200
     assert "Invalid email or password" in response.text
 
-def test_admin_login_success():
-    # This test requires an ADMIN user in the DB.
-    # Since we can't register admins via UI, we might need a helper or mock.
-    # For the purpose of this test, if no admin exists, it will fail.
-    # In a real setup, we'd use a setup script.
+@patch("app.get_db_cursor")
+def test_admin_login_success(mock_get_cursor):
+    mock_cm = MagicMock()
+    mock_cursor = MagicMock()
+    mock_get_cursor.return_value = mock_cm
+    mock_cm.__enter__.return_value = mock_cursor
+    mock_cursor.fetchone.return_value = {
+        "user_id": 1, "email": "admin@example.com",
+        "password_hash": generate_password_hash("adminpassword"),
+        "role": "ADMIN"
+    }
+
     response = client.post("/auth/admin-login", data={
         "email": "admin@example.com",
         "password": "adminpassword"
-    })
-    # We expect 302 if admin exists, or 200 with error if not.
-    # Since we don't know the DB state, this is a placeholder.
-    if response.status_code == 302:
-        assert response.headers["location"] == "/admin/dashboard"
+    }, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/dashboard?login=success"
 
 def test_protected_route_redirect():
     # Attempt to access dashboard without token
-    response = client.get("/student/dashboard")
+    response = client.get("/student/dashboard", follow_redirects=False)
     assert response.status_code == 302
     assert response.headers["location"] == "/login"

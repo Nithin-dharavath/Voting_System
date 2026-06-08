@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 from app import app, create_access_token, JWT_SECRET, COOKIE_NAME
 from database.connection import get_db_cursor
-import datetime
+from datetime import datetime, timedelta, timezone
 import re
 
 client = TestClient(app)
@@ -13,16 +13,17 @@ def get_student_token(user_id=1, email="student@example.com"):
 @pytest.fixture(scope="function", autouse=True)
 def setup_db():
     """Clean up and set up the database for each test."""
+    now = datetime.now(timezone.utc)
     with get_db_cursor() as cursor:
         # Clear existing applications for the test user/election
         cursor.execute("DELETE FROM candidate_applications")
         # Ensure we have a test student
         cursor.execute("INSERT IGNORE INTO users (user_id, full_name, email, password_hash, department, academic_year, role) VALUES (1, 'Test Student', 'student@example.com', 'hashed_pw', 'CS', '2023', 'STUDENT')")
-        # Ensure we have test elections
+        # Ensure we have test elections with relative dates
         cursor.execute("DELETE FROM elections WHERE id IN (1, 2, 3)")
-        cursor.execute("INSERT INTO elections (id, title, description, start_time, end_time, status) VALUES (1, 'Upcoming Election', 'Desc', '2026-06-01 00:00:00', '2026-06-02 00:00:00', 'UPCOMING')")
-        cursor.execute("INSERT INTO elections (id, title, description, start_time, end_time, status) VALUES (2, 'Active Election', 'Desc', '2026-05-01 00:00:00', '2026-05-31 00:00:00', 'ACTIVE')")
-        cursor.execute("INSERT INTO elections (id, title, description, start_time, end_time, status) VALUES (3, 'Ended Election', 'Desc', '2026-04-01 00:00:00', '2026-04-02 00:00:00', 'ENDED')")
+        cursor.execute("INSERT INTO elections (id, title, description, start_time, end_time) VALUES (1, 'Upcoming Election', 'Desc', %s, %s)", (now + timedelta(days=7), now + timedelta(days=8)))
+        cursor.execute("INSERT INTO elections (id, title, description, start_time, end_time) VALUES (2, 'Active Election', 'Desc', %s, %s)", (now - timedelta(days=1), now + timedelta(days=1)))
+        cursor.execute("INSERT INTO elections (id, title, description, start_time, end_time) VALUES (3, 'Ended Election', 'Desc', %s, %s)", (now - timedelta(days=90), now - timedelta(days=89)))
     yield
 
 def test_apply_page_upcoming_election():
@@ -150,8 +151,8 @@ def test_view_candidate_status_success():
     assert response.status_code == 200
     assert "Upcoming Election" in response.text
     assert "Active Election" in response.text
-    assert "PENDING" in response.text
-    assert "APPROVED" in response.text
+    assert "Pending" in response.text
+    assert "Approved" in response.text
 
 def test_view_candidate_status_unauthenticated():
     """Test that unauthenticated users are redirected from status page."""

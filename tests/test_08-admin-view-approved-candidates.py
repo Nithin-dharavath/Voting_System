@@ -97,10 +97,8 @@ def test_get_approved_candidates_filtering(mock_cursor):
 
     # Verify the SQL query uses 'APPROVED'
     called_query = mock_cur.execute.call_args[0][0]
-    called_params = mock_cur.execute.call_args[0][1]
 
-    assert "WHERE ca.approval_status = %s" in called_query
-    assert "APPROVED" in called_params
+    assert "WHERE ca.approval_status = 'APPROVED'" in called_query
 
 @patch("app.get_db_cursor")
 def test_admin_dashboard_link(mock_cursor):
@@ -115,6 +113,8 @@ def test_admin_dashboard_link(mock_cursor):
         {"count": 5},    # active_elections
         {"count": 10},   # pending_apps
     ]
+    # Mock fetchall for the recent_activity query
+    mock_cur.fetchall.return_value = []
     mock_cursor.return_value.__enter__.return_value = mock_cur
 
     cookies = get_admin_cookies()
