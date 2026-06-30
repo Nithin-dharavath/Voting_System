@@ -227,7 +227,7 @@ def test_publish_results_is_idempotent_when_already_published(mock_get_election,
     mock_cursor.execute.assert_not_called()
 
 
-@patch("app.get_election_by_id")
+@patch("services.election_service.get_election_by_id")
 def test_publish_results_redirects_when_election_missing(mock_get_election):
     mock_get_election.return_value = None
 

@@ -146,9 +146,12 @@ def test_submit_vote_rejects_invalid_candidate(
     )
 
 
+@patch("app.has_user_applied")
 @patch("app.has_user_voted")
 @patch("app.get_election_by_id")
-def test_detail_page_hides_vote_action_after_vote(mock_get_election, mock_has_voted):
+def test_detail_page_hides_vote_action_after_vote(
+    mock_get_election, mock_has_voted, mock_has_applied
+):
     mock_get_election.return_value = {
         "id": 10,
         "title": "Student Council",
@@ -158,6 +161,7 @@ def test_detail_page_hides_vote_action_after_vote(mock_get_election, mock_has_vo
         "status": "ACTIVE",
     }
     mock_has_voted.return_value = True
+    mock_has_applied.return_value = False
 
     client.cookies.clear()
     client.cookies.set(COOKIE_NAME, create_test_token())
