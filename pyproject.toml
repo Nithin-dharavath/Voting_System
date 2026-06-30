@@ -20,6 +20,9 @@ dependencies = [
     "starlette>=1.0.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["database*", "schemas*", "services*"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0.0",

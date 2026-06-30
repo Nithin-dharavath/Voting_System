@@ -1,47 +1,23 @@
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 *.db
-venv/
-.env
-.pytest_cache/
-.codex/
-
-# Virtual Environment
-venv/
-.venv/
-
-# Environment Variables
 .env
 .env.*
 !.env.example
-
-# Python Cache
-__pycache__/
-*.pyc
-*.pyo
-
-# Logs
-*.log
-
-# VS Code
+.pytest_cache/
+.codex/
+venv/
+.venv/
 .vscode/
-
-# OS Files
 .DS_Store
 Thumbs.db
-
-# Build Files
 dist/
 build/
-
-# Testing
-.pytest_cache/
-.coverage
-
-# MySQL Dumps
-*.sql
-*.dump
-
+*.log
 uploads/
 session-*.md
+coverage.xml
+.coverage
+htmlcov/
