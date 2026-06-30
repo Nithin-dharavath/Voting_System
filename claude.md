@@ -2,82 +2,100 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Development Commands
+## 🔧 Common Development Commands
+
+### Setup
+1. Clone the repository and navigate to the project directory.
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv venv
+   # Windows:
+   venv\Scripts\activate
+   # Linux/Mac:
+   source venv/bin/activate
+   ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Configure environment variables by editing `.env` (see `.env.example` or README for required variables).
+5. Seed the database:
+   ```bash
+   python database/seed.py
+   ```
 
 ### Running the Application
+Start the development server with hot reload:
 ```bash
-# Run the FastAPI server with auto-reload
 uvicorn app:app --reload
 ```
+The application will be available at `http://localhost:8000`.
 
-### Testing
+### Running Tests
+Execute the test suite with pytest:
 ```bash
-# Run all tests using pytest
 pytest
-
-# Run a specific test file
-pytest tests/test_auth.py
-
-# Run a specific test case
-pytest tests/test_auth.py::test_function_name
 ```
 
-### Database Management
+### Seeding Admin Account (if needed)
 ```bash
-# Seed the database with initial data
-python database/seed.py
-
-# Create a default administrator account
 python database/create_admin.py
 ```
 
-## High-Level Architecture
+## 🏗️ Code Architecture & Structure
 
-The system is a modular monolithic REST application using **FastAPI** and **MySQL**.
+### Overview
+This is a web-based election management platform built with **FastAPI** (backend), **Jinja2 templates** (frontend), and **MySQL** (database). It uses JWT for authentication and features role-based access control (STUDENT, ADMIN).
 
-- **Frontend**: Server-side rendered templates using **Jinja2** with vanilla HTML/CSS/JS.
-- **Backend**: FastAPI handles routing, authentication (JWT in cookies), and business logic.
-- **Database**: Direct MySQL interaction via `get_db_cursor()` (No ORM).
-- **Auth Flow**:
-    - `AuthMiddleware` intercepts requests to decode JWTs from cookies.
-    - `admin_guard` and `student_guard` dependencies enforce Role-Based Access Control (RBAC).
-- **Voting Workflow**:
-    - Student $\rightarrow$ Session $\rightarrow$ Vote $\rightarrow$ Verification $\rightarrow$ Commit.
-    - Uses ACID transactions for vote submission to ensure atomicity.
+### Key Directories & Files
 
-## Project Constraints & Guardrails
+- `app.py` - Main FastAPI application entrypoint. Contains route definitions, middleware, and application setup.
+- `templates/` - Jinja2 HTML templates for server-side rendered views.
+  - `base.html` - Base layout template.
+  - `partials/` - Reusable template fragments (e.g., navigation, forms).
+- `static/` - Static assets (CSS, JavaScript, images).
+  - `css/` - Stylesheets.
+  - `js/` - Client-side JavaScript.
+- `database/` - Database utilities and seeding scripts.
+  - `connection.py` - MySQL connection utility using `mysql-connector-python`.
+  - `seed.py` - Populates the database with initial data (admin and student accounts).
+  - `create_admin.py` - Creates an administrator account.
+- `uploads/` - Directory for user-uploaded files (profile pictures, vote verification evidence).
+- `tests/` - Pytest test suite for backend functionality.
+- `docs/` - Additional documentation (architecture, API details, etc.).
+- `workflow/` - Development phase notes (historical, may be outdated).
 
-### Implementation Rules
-- **Database**: Strictly **no SQLAlchemy or ORMs**. Use parameterized queries only via `get_db_cursor()`.
-- **Security**: 
-    - Passwords must be hashed with `werkzeug.security`.
-    - Session tokens must be stored in `HttpOnly`, `SameSite=Lax` cookies.
-    - All POST routes must be protected by CSRF validation.
-- **Frontend**:
-    - All templates must extend `base.html`.
-    - Use CSS variables for colors; never hardcode hex values.
-- **Configuration**: Never hardcode secrets (DB passwords, JWT secrets, upload paths). Use `.env` or environment variables.
-- **Uploads**: Validate file types, rename files safely, and store only the `file_path` in the database.
+### Key Technologies
+- **Backend**: FastAPI (Python 3.10+)
+- **Frontend**: Jinja2 templates with HTML/CSS/JavaScript
+- **Database**: MySQL via `mysql-connector-python`
+- **Authentication**: JWT (PyJWT) with access tokens stored in HTTP-only cookies
+- **Password Hashing**: Werkzeug security utilities
+- **File Uploads**: Local storage in `uploads/` directory
+- **Testing**: Pytest
 
-### Core Domain Rules
-- **Voting**:
-    - Election must be `ACTIVE`.
-    - Only one vote per student per election.
-    - Candidates must be `APPROVED` to receive votes.
-    - Verification must exist before the final vote is committed.
-    - No new sessions if the election has $< 2$ minutes remaining.
-- **Results**:
-    - Results are hidden (`result_published = false`) until the admin explicitly publishes them.
-    - Students cannot see live counts.
+### Authentication Flow
+- Users log in via `/login` endpoint, which sets an HTTP-only cookie containing a JWT token.
+- Protected routes verify the token via a dependency (`get_current_user` in `app.py`).
+- Roles are checked via dependencies (`require_role` dependency).
 
-## Key Entities & Naming
+### Election Lifecycle
+Elections progress through states: `UPCOMING` → `ACTIVE` → `ENDED` based on start/end times.
+- Only admins can create/modify elections.
+- Students can view and vote in active elections.
+- Vote verification requires uploading a selfie/signature per vote.
+- Results are hidden until published by an admin.
 
-### Required Field Names
-Maintain consistency with these fields:
-- `student_id`, `election_id`, `candidate_application_id`, `approval_status`, `result_published`, `verification_type`, `file_path`, `created_at`.
+### Important Notes
+- The `.env` file must contain MySQL connection details (see README for required variables).
+- Passwords are hashed using `generate_password_hash` and verified with `check_password_hash`.
+- File uploads are stored in the `uploads/` directory; ensure this directory exists and is writable.
+- The seed script creates an admin account and several student accounts for testing (see README for credentials).
 
-### Required Values
-- **Roles**: `STUDENT`, `ADMIN`
-- **Election Status**: `UPCOMING`, `ACTIVE`, `ENDED`
-- **Candidate Status**: `PENDING`, `APPROVED`, `REJECTED`
-- **Verification Types**: `SELFIE`, `SIGNATURE`
+## 📝 Contributing Guidelines
+When contributing to this codebase:
+1. Follow the existing code style (PEP 8 for Python, consistent with surrounding code).
+2. Write tests for new functionality in the `tests/` directory.
+3. Update the database seed scripts if schema changes require new seed data.
+4. Keep Jinja2 templates DRY by using partials for reusable components.
+5. Ensure any new endpoints have proper authentication and authorization checks.

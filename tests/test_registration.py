@@ -1,8 +1,9 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
+
 from app import app
-from database.connection import get_db_cursor
 
 client = TestClient(app)
 

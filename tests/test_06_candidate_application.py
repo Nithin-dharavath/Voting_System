@@ -1,9 +1,11 @@
+import re
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
-from app import app, create_access_token, JWT_SECRET, COOKIE_NAME
+
+from app import COOKIE_NAME, app, create_access_token
 from database.connection import get_db_cursor
-from datetime import datetime, timedelta, timezone
-import re
 
 client = TestClient(app)
 
@@ -13,7 +15,7 @@ def get_student_token(user_id=1, email="student@example.com"):
 @pytest.fixture(scope="function", autouse=True)
 def setup_db():
     """Clean up and set up the database for each test."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     with get_db_cursor() as cursor:
         # Clear existing applications for the test user/election
         cursor.execute("DELETE FROM candidate_applications")

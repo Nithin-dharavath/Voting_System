@@ -1,20 +1,20 @@
-from fastapi import FastAPI, Request, Form, HTTPException, Depends, Response, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from werkzeug.security import generate_password_hash, check_password_hash
-from database.connection import get_db_cursor
-import mysql.connector
-import jwt
-import os
-import secrets
 import logging
-import uuid
-import shutil
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-from starlette.middleware.base import BaseHTTPMiddleware
+import os
 import re
+import secrets
+import shutil
+import uuid
+from datetime import UTC, datetime, timedelta
+
+import jwt
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from database.connection import get_db_cursor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -29,16 +29,16 @@ def ensure_datetime(dt):
         return None
     if isinstance(dt, datetime):
         if dt.tzinfo is None:
-            return dt.replace(tzinfo=timezone.utc)
+            return dt.replace(tzinfo=UTC)
         return dt
     try:
         dt_obj = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
-        return dt_obj.replace(tzinfo=timezone.utc)
+        return dt_obj.replace(tzinfo=UTC)
     except ValueError:
         try:
             dt_obj = datetime.fromisoformat(dt)
             if dt_obj.tzinfo is None:
-                return dt_obj.replace(tzinfo=timezone.utc)
+                return dt_obj.replace(tzinfo=UTC)
             return dt_obj
         except ValueError:
             return dt # Return as is if parsing fails, template might still fail but we tried
@@ -48,7 +48,7 @@ def format_datetime_simple(dt):
     return dt_obj.strftime('%Y-%m-%d %H:%M') if dt_obj else None
 
 def compute_election_status(start_time, end_time):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = ensure_datetime(start_time)
     end = ensure_datetime(end_time)
     if now < start:
@@ -108,7 +108,7 @@ app.add_middleware(AuthMiddleware)
 
 def create_access_token(data: dict):
     payload = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(hours=24)
+    expire = datetime.now(UTC) + timedelta(hours=24)
     payload.update({"exp": expire})
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -339,7 +339,7 @@ async def register_user(
             {"request": request, "success": "Registration successful! You can now login."}
         )
 
-    except Exception as e:
+    except Exception:
         return templates.TemplateResponse(
             request,
             "register.html",
@@ -386,7 +386,7 @@ async def login_user(
         )
         return response
 
-    except Exception as e:
+    except Exception:
         return templates.TemplateResponse(
             request,
             "login.html",
@@ -437,7 +437,7 @@ async def admin_login_user(
         )
         return response
 
-    except Exception as e:
+    except Exception:
         return templates.TemplateResponse(
             request,
             "admin-login.html",
@@ -652,8 +652,8 @@ async def submit_student_vote(
                 "INSERT INTO voting_sessions (student_id, election_id, started_at, expires_at, completed, candidate_application_id) "
                 "VALUES (%s, %s, %s, %s, 0, %s) "
                 "ON DUPLICATE KEY UPDATE candidate_application_id = %s, started_at = %s, expires_at = %s",
-                (user["user_id"], id, datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(minutes=15), candidate_application_id,
-                 candidate_application_id, datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(minutes=15))
+                (user["user_id"], id, datetime.now(UTC), datetime.now(UTC) + timedelta(minutes=15), candidate_application_id,
+                 candidate_application_id, datetime.now(UTC), datetime.now(UTC) + timedelta(minutes=15))
             )
     except Exception:
         logger.exception("Failed to record session choice")
@@ -798,10 +798,10 @@ async def create_election_page(request: Request, user = Depends(admin_guard)):
 @app.post("/admin/elections")
 async def create_election(
     request: Request,
-    title: Optional[str] = Form(None),
-    description: Optional[str] = Form(None),
-    start_time: Optional[str] = Form(None),
-    end_time: Optional[str] = Form(None),
+    title: str | None = Form(None),
+    description: str | None = Form(None),
+    start_time: str | None = Form(None),
+    end_time: str | None = Form(None),
     user = Depends(admin_guard),
     csrf_token = Depends(verify_csrf)
 ):
@@ -837,7 +837,7 @@ async def create_election(
 
         return RedirectResponse(url="/admin/elections?success=created", status_code=303)
 
-    except Exception as e:
+    except Exception:
         csrf_token = await get_csrf_token(request)
         response = templates.TemplateResponse(
             request,
@@ -867,10 +867,10 @@ async def edit_election_page(request: Request, id: int, user = Depends(admin_gua
 async def update_election(
     request: Request,
     id: int,
-    title: Optional[str] = Form(None),
-    description: Optional[str] = Form(None),
-    start_time: Optional[str] = Form(None),
-    end_time: Optional[str] = Form(None),
+    title: str | None = Form(None),
+    description: str | None = Form(None),
+    start_time: str | None = Form(None),
+    end_time: str | None = Form(None),
     user = Depends(admin_guard),
     csrf_token = Depends(verify_csrf)
 ):
@@ -908,7 +908,7 @@ async def update_election(
 
         return RedirectResponse(url="/admin/elections?success=updated", status_code=303)
 
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to update election")
         election = get_election_by_id(id)
         csrf_token = await get_csrf_token(request)
@@ -926,7 +926,7 @@ async def delete_election(request: Request, id: int, user = Depends(admin_guard)
         with get_db_cursor() as cursor:
             cursor.execute("DELETE FROM elections WHERE id = %s", (id,))
         return RedirectResponse(url="/admin/elections?success=deleted", status_code=303)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to delete election")
         return RedirectResponse(url="/admin/elections?error=internal", status_code=303)
 
@@ -937,7 +937,7 @@ async def admin_candidates_list(
     status: str = "PENDING",
     sort: str = "date",
     order: str = "ASC",
-    category: Optional[str] = None,
+    category: str | None = None,
     user = Depends(admin_guard)
 ):
     status = status.upper()
@@ -961,7 +961,7 @@ async def admin_candidates_list(
             cursor.execute("SELECT DISTINCT department FROM users WHERE department IS NOT NULL")
             departments = [row['department'] for row in cursor.fetchall()]
 
-            query = f"""
+            query = """
             SELECT ca.*, u.full_name as applicant_name, u.department, e.title as election_title
             FROM candidate_applications ca
             JOIN users u ON ca.user_id = u.user_id
@@ -1063,7 +1063,7 @@ async def update_candidate_status(
             query = "UPDATE candidate_applications SET approval_status = %s, reviewed_by = %s WHERE id = %s"
             cursor.execute(query, (status, user['user_id'], id))
         return RedirectResponse(url="/admin/candidates", status_code=303)
-    except Exception as e:
+    except Exception:
         logger.exception(f"Failed to {action} candidate")
         return RedirectResponse(url="/admin/candidates?error=internal", status_code=303)
 
@@ -1265,7 +1265,7 @@ async def student_results_overview(request: Request, user = Depends(student_guar
     )
 
 
-def save_verification_file(user_id: int, election_id: int, v_type: str, file: UploadFile) -> Optional[str]:
+def save_verification_file(user_id: int, election_id: int, v_type: str, file: UploadFile) -> str | None:
     allowed_extensions = {'.jpg', '.jpeg', '.png'}
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in allowed_extensions:
@@ -1283,7 +1283,7 @@ def save_verification_file(user_id: int, election_id: int, v_type: str, file: Up
         logger.error(f"Error saving verification file for user {user_id}: {e}")
         return None
 
-def save_profile_picture(user_id: int, file: UploadFile) -> Optional[str]:
+def save_profile_picture(user_id: int, file: UploadFile) -> str | None:
     allowed_extensions = {'.jpg', '.jpeg', '.png'}
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in allowed_extensions:
@@ -1324,7 +1324,7 @@ async def student_election_verify_page(request: Request, id: int, user = Depends
         return RedirectResponse(url=f"/student/elections/{id}/vote?error=internal", status_code=302)
 
     expires_at = ensure_datetime(session['expires_at'])
-    if expires_at and expires_at < datetime.now(timezone.utc):
+    if expires_at and expires_at < datetime.now(UTC):
         return RedirectResponse(url=f"/student/elections/{id}/vote?error=session_expired", status_code=302)
 
     error_key = request.query_params.get("error")
@@ -1384,7 +1384,7 @@ async def submit_student_verification(
                 return RedirectResponse(url=f"/student/elections/{id}/verify?error=internal", status_code=303)
 
             expires_at = ensure_datetime(session['expires_at'])
-            if expires_at and expires_at < datetime.now(timezone.utc):
+            if expires_at and expires_at < datetime.now(UTC):
                 return RedirectResponse(url=f"/student/elections/{id}/vote?error=session_expired", status_code=303)
 
             candidate_application_id = session['candidate_application_id']
@@ -1392,13 +1392,13 @@ async def submit_student_verification(
             # 2. Insert into votes table
             cursor.execute(
                 "INSERT INTO votes (voter_id, election_id, candidate_id, voted_at) VALUES (%s, %s, %s, %s)",
-                (user["user_id"], id, candidate_application_id, datetime.now(timezone.utc))
+                (user["user_id"], id, candidate_application_id, datetime.now(UTC))
             )
 
             # 3. Insert into vote_verifications table
             cursor.execute(
                 "INSERT INTO vote_verifications (student_id, election_id, verification_type, file_path, uploaded_at) VALUES (%s, %s, %s, %s, %s)",
-                (user["user_id"], id, verification_type, file_path, datetime.now(timezone.utc))
+                (user["user_id"], id, verification_type, file_path, datetime.now(UTC))
             )
 
             # 4. Mark session completed
@@ -1407,7 +1407,7 @@ async def submit_student_verification(
                 (user["user_id"], id)
             )
 
-    except Exception as e:
+    except Exception:
         logger.exception("Verification transaction failed")
         return RedirectResponse(url=f"/student/elections/{id}/verify?error=internal", status_code=303)
 
@@ -1452,7 +1452,7 @@ async def update_profile(
     full_name: str = Form(...),
     department: str = Form(...),
     academic_year: str = Form(...),
-    profile_pic: Optional[UploadFile] = File(None),
+    profile_pic: UploadFile | None = File(None),
     user = Depends(get_current_user),
     csrf_token = Depends(verify_csrf)
 ):
@@ -1473,7 +1473,7 @@ async def update_profile(
                 cursor.execute(query, (full_name, department, academic_year, user['user_id']))
 
         return RedirectResponse(url="/profile?success=updated", status_code=303)
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to update user profile")
         return RedirectResponse(url="/profile?error=internal", status_code=303)
 
@@ -1502,7 +1502,7 @@ async def admin_update_user_profile(
     full_name: str = Form(...),
     department: str = Form(...),
     academic_year: str = Form(...),
-    profile_pic: Optional[UploadFile] = File(None),
+    profile_pic: UploadFile | None = File(None),
     user = Depends(admin_guard),
     csrf_token = Depends(verify_csrf)
 ):
@@ -1520,6 +1520,6 @@ async def admin_update_user_profile(
                 cursor.execute(query, (full_name, department, academic_year, id))
 
         return RedirectResponse(url=f"/admin/users/{id}/profile?success=updated", status_code=303)
-    except Exception as e:
+    except Exception:
         logger.exception("Admin failed to update user profile")
         return RedirectResponse(url=f"/admin/users/{id}/profile?error=internal", status_code=303)

@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import jwt
 from fastapi.testclient import TestClient
 
-from app import app, COOKIE_NAME, CSRF_COOKIE_NAME, JWT_ALGORITHM, JWT_SECRET
+from app import COOKIE_NAME, CSRF_COOKIE_NAME, JWT_ALGORITHM, JWT_SECRET, app
 
 client = TestClient(app)
 
@@ -14,7 +14,7 @@ def make_token(user_id: int = 2, role: str = "STUDENT", email: str = "student@ex
         "user_id": user_id,
         "role": role,
         "email": email,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
+        "exp": datetime.now(UTC) + timedelta(hours=24),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -36,8 +36,8 @@ def make_election(election_id: int = 10, status: str = "ENDED", result_published
         "id": election_id,
         "title": "Cultural Fest Lead 2025",
         "description": "Election for the Cultural Fest Lead.",
-        "start_time": datetime.now(timezone.utc) - timedelta(days=2),
-        "end_time": datetime.now(timezone.utc) - timedelta(days=1),
+        "start_time": datetime.now(UTC) - timedelta(days=2),
+        "end_time": datetime.now(UTC) - timedelta(days=1),
         "status": status,
         "result_published": result_published,
     }

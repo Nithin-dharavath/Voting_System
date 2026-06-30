@@ -1,7 +1,8 @@
-import mysql.connector
 import os
-from dotenv import load_dotenv
 from contextlib import contextmanager
+
+import mysql.connector
+from dotenv import load_dotenv
 
 load_dotenv()
 

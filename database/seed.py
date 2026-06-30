@@ -1,6 +1,9 @@
 import datetime
+
 from werkzeug.security import generate_password_hash
+
 from database.connection import get_db_cursor
+
 
 def table_exists(cursor, table_name):
     cursor.execute(f"SHOW TABLES LIKE '{table_name}'")

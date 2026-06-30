@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import jwt
 from fastapi.testclient import TestClient
 
-from app import app, COOKIE_NAME, CSRF_COOKIE_NAME, JWT_ALGORITHM, JWT_SECRET
+from app import COOKIE_NAME, JWT_ALGORITHM, JWT_SECRET, app
 
 client = TestClient(app)
 
@@ -14,7 +14,7 @@ def admin_token(user_id: int = 1, email: str = "admin@college.edu") -> str:
         "user_id": user_id,
         "role": "ADMIN",
         "email": email,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
+        "exp": datetime.now(UTC) + timedelta(hours=24),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -24,7 +24,7 @@ def student_token(user_id: int = 2, email: str = "student@example.com") -> str:
         "user_id": user_id,
         "role": "STUDENT",
         "email": email,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
+        "exp": datetime.now(UTC) + timedelta(hours=24),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -34,8 +34,8 @@ def make_ended_election(election_id: int = 10, result_published: bool = False) -
         "id": election_id,
         "title": f"Election {election_id}",
         "description": f"Description for election {election_id}",
-        "start_time": datetime.now(timezone.utc) - timedelta(days=3),
-        "end_time": datetime.now(timezone.utc) - timedelta(days=1),
+        "start_time": datetime.now(UTC) - timedelta(days=3),
+        "end_time": datetime.now(UTC) - timedelta(days=1),
         "status": "ENDED",
         "result_published": result_published,
     }
