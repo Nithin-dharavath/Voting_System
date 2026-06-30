@@ -18,5 +18,6 @@ def setup_profile_icons():
     except Exception as e:
         print(f"An error occurred while creating the table: {e}")
 
+
 if __name__ == "__main__":
     setup_profile_icons()

@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import jwt
 from fastapi.testclient import TestClient
@@ -68,6 +68,7 @@ def make_results() -> list:
 # GET /admin/results
 # ---------------------------------------------------------------------------
 
+
 def test_admin_results_overview_unauthenticated_redirects():
     response = client.get("/admin/results", follow_redirects=False)
     assert response.status_code == 302
@@ -82,14 +83,8 @@ def test_admin_results_overview_student_redirects():
     assert response.headers["location"] == "/admin/login"
 
 
-@patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_admin_results_overview_renders_all_ended_elections(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
+@patch("services.election_service.get_election_results")
+def test_admin_results_overview_renders_all_ended_elections(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = [
         make_ended_election(10, result_published=True),
         make_ended_election(11, result_published=False),
@@ -114,14 +109,8 @@ def test_admin_results_overview_renders_all_ended_elections(mock_get_cursor, moc
     assert 'action="/admin/elections/11/publish-results"' in body
 
 
-@patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_admin_results_overview_hides_publish_when_already_published(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
+@patch("services.election_service.get_election_results")
+def test_admin_results_overview_hides_publish_when_already_published(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = [
         make_ended_election(10, result_published=True),
     ]
@@ -133,17 +122,13 @@ def test_admin_results_overview_hides_publish_when_already_published(mock_get_cu
 
     assert response.status_code == 200
     body = response.text
-    assert "publish-results" not in body.lower().replace("results published", "").replace("published", "")
+    assert "publish-results" not in body.lower().replace("results published", "").replace(
+        "published", ""
+    )
 
 
-@patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_admin_results_overview_shows_info_message_after_publish(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
+@patch("services.election_service.get_election_results")
+def test_admin_results_overview_shows_info_message_after_publish(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = [
         make_ended_election(10, result_published=True),
     ]
@@ -157,14 +142,8 @@ def test_admin_results_overview_shows_info_message_after_publish(mock_get_cursor
     assert "Results have been published to students." in response.text
 
 
-@patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_admin_results_overview_empty_state_when_no_ended_elections(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
+@patch("services.election_service.get_election_results")
+def test_admin_results_overview_empty_state_when_no_ended_elections(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = []
     mock_get_results.return_value = ([], 0)
 
@@ -176,14 +155,8 @@ def test_admin_results_overview_empty_state_when_no_ended_elections(mock_get_cur
     assert "No Completed Elections Yet" in response.text
 
 
-@patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_admin_results_overview_highlights_winner(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
+@patch("services.election_service.get_election_results")
+def test_admin_results_overview_highlights_winner(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = [
         make_ended_election(10, result_published=False),
     ]
@@ -205,6 +178,7 @@ def test_admin_results_overview_highlights_winner(mock_get_cursor, mock_get_resu
 # GET /student/results
 # ---------------------------------------------------------------------------
 
+
 def test_student_results_overview_unauthenticated_redirects():
     response = client.get("/student/results", follow_redirects=False)
     assert response.status_code == 302
@@ -220,13 +194,7 @@ def test_student_results_overview_admin_redirects():
 
 
 @patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_student_results_overview_filters_to_published_only(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
+def test_student_results_overview_filters_to_published_only(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = [
         make_ended_election(10, result_published=True),
     ]
@@ -249,13 +217,7 @@ def test_student_results_overview_filters_to_published_only(mock_get_cursor, moc
 
 
 @patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_student_results_overview_empty_state(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
+def test_student_results_overview_empty_state(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = []
     mock_get_results.return_value = ([], 0)
 
@@ -271,14 +233,9 @@ def test_student_results_overview_empty_state(mock_get_cursor, mock_get_results)
 # Navbar / Sidebar presence
 # ---------------------------------------------------------------------------
 
-@patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_admin_navbar_contains_results_link(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
 
+@patch("services.election_service.get_election_results")
+def test_admin_navbar_contains_results_link(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = []
     mock_get_results.return_value = ([], 0)
 
@@ -292,13 +249,7 @@ def test_admin_navbar_contains_results_link(mock_get_cursor, mock_get_results):
 
 
 @patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_student_navbar_contains_results_link(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
+def test_student_navbar_contains_results_link(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = []
     mock_get_results.return_value = ([], 0)
 
@@ -311,14 +262,8 @@ def test_student_navbar_contains_results_link(mock_get_cursor, mock_get_results)
     assert "nav-results-link" in response.text
 
 
-@patch("app.get_election_results")
-@patch("app.get_db_cursor")
-def test_admin_sidebar_contains_results_link(mock_get_cursor, mock_get_results):
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
+@patch("services.election_service.get_election_results")
+def test_admin_sidebar_contains_results_link(mock_get_results, mock_cursor):
     mock_cursor.fetchall.return_value = []
     mock_get_results.return_value = ([], 0)
 

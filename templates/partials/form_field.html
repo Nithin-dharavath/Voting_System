@@ -1,0 +1,19 @@
+<div class="form-group">
+    <label for="{{ field_id }}" {% if required %}aria-required="true"{% endif %}>{{ label }}</label>
+    {% if field_type == "textarea" %}
+    <textarea id="{{ field_id }}" name="{{ field_name }}" class="form-control" {% if required %}required{% endif %} {% if placeholder %}placeholder="{{ placeholder }}"{% endif %} {% if attrs %}{{ attrs }}{% endif %}>{{ value or '' }}</textarea>
+    {% elif field_type == "select" %}
+    <select id="{{ field_id }}" name="{{ field_name }}" class="form-control" {% if required %}required{% endif %} aria-label="{{ label }}">
+        {% for option in options %}
+        <option value="{{ option.value }}" {% if option.selected %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+    </select>
+    {% elif field_type == "file" %}
+    <input type="file" id="{{ field_id }}" name="{{ field_name }}" class="form-control" accept="{{ accept or '' }}" {% if required %}required{% endif %} aria-label="{{ label }}">
+    {% else %}
+    <input type="{{ field_type or 'text' }}" id="{{ field_id }}" name="{{ field_name }}" class="form-control" value="{{ value or '' }}" {% if required %}required{% endif %} {% if placeholder %}placeholder="{{ placeholder }}"{% endif %} {% if minlength %}minlength="{{ minlength }}"{% endif %} {% if pattern %}pattern="{{ pattern }}"{% endif %} aria-label="{{ label }}">
+    {% endif %}
+    {% if help_text %}
+    <small class="form-help" id="{{ field_id }}-help">{{ help_text }}</small>
+    {% endif %}
+</div>

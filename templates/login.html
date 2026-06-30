@@ -3,22 +3,23 @@
 {% block title %}Login - Online Voting System{% endblock %}
 
 {% block content %}
-    <h1 class="form-title">Login</h1>
+    <h1>Login</h1>
 
-    {% if error %}
-        <div class="alert alert-error">{{ error }}</div>
-    {% endif %}
+    {% set error_message = error if error else None %}
+    {% set success_message = success if success else None %}
+    {% include 'partials/flash_messages.html' %}
 
-    <form action="/auth/login" method="POST" class="auth-form">
+    <form action="/auth/login" method="POST" class="auth-form" novalidate>
         <div class="form-group">
             <label for="email">Email</label>
-            <input type="email" id="email" name="email" required>
+            <input type="email" id="email" name="email" required aria-required="true" aria-describedby="email-help" autocomplete="email">
+            <small id="email-help" class="form-help">Enter your registered email address.</small>
         </div>
         <div class="form-group">
             <label for="password">Password</label>
-            <input type="password" id="password" name="password" required>
+            <input type="password" id="password" name="password" required aria-required="true" autocomplete="current-password">
         </div>
-        <button type="submit" class="btn-primary">Login</button>
+        <button type="submit">Login</button>
     </form>
 
     <div class="footer-link">

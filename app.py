@@ -1,87 +1,110 @@
 import logging
 import os
-import re
-import secrets
-import shutil
-import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
-import jwt
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
-from werkzeug.security import check_password_hash, generate_password_hash
 
 from database.connection import get_db_cursor
+from exceptions import AuthError, ElectionError, NotFoundError, ValidationError, VoteError
+from middleware import AppErrorHandlerMiddleware, RequestLoggingMiddleware
+from services import auth_service
+from services.auth_service import configure_jwt
+from services.auth_service import create_access_token as auth_create_token
+from services.auth_service import decode_access_token as auth_decode_token
+from services.candidate_service import (
+    apply_as_candidate,
+    get_applications_by_status,
+    get_approved_candidates_for_election,
+    get_election_candidates,
+    get_pending_count,
+    get_student_candidacy_status,
+    get_user_applications,
+    has_user_applied,
+    update_candidate_status,
+)
+from services.election_service import (
+    create_election,
+    delete_election,
+    ensure_datetime,
+    get_active_elections_count,
+    get_all_elections,
+    get_election_by_id,
+    get_election_results,
+    get_elections_with_results,
+    get_published_ended_elections,
+    get_upcoming_elections,
+    publish_results,
+    update_election,
+)
+from services.file_service import (
+    validate_and_save_profile_picture,
+    validate_and_save_verification_file,
+)
+from services.user_service import (
+    get_distinct_departments,
+    get_student_count,
+    get_user_by_id,
+    get_user_candidate_applications,
+    update_user_profile,
+)
+from services.vote_service import (
+    create_voting_session,
+    get_active_session,
+    get_user_vote_count,
+    has_user_voted,
+    submit_vote_with_verification,
+)
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def validate_email(email: str) -> bool:
-    pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
-    return bool(re.match(pattern, email))
+app = FastAPI(
+    title="Voting System API",
+    description="Web-based election management platform",
+    version="1.0.0",
+)
 
-def ensure_datetime(dt):
-    if dt is None:
-        return None
-    if isinstance(dt, datetime):
-        if dt.tzinfo is None:
-            return dt.replace(tzinfo=UTC)
-        return dt
-    try:
-        dt_obj = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
-        return dt_obj.replace(tzinfo=UTC)
-    except ValueError:
-        try:
-            dt_obj = datetime.fromisoformat(dt)
-            if dt_obj.tzinfo is None:
-                return dt_obj.replace(tzinfo=UTC)
-            return dt_obj
-        except ValueError:
-            return dt # Return as is if parsing fails, template might still fail but we tried
-
-def format_datetime_simple(dt):
-    dt_obj = ensure_datetime(dt)
-    return dt_obj.strftime('%Y-%m-%d %H:%M') if dt_obj else None
-
-def compute_election_status(start_time, end_time):
-    now = datetime.now(UTC)
-    start = ensure_datetime(start_time)
-    end = ensure_datetime(end_time)
-    if now < start:
-        return 'UPCOMING'
-    elif now >= end:
-        return 'ENDED'
-    return 'ACTIVE'
-
-
-app = FastAPI()
-
-# Mount the static directory to serve CSS, JS and images
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Ensure uploads directory exists
 os.makedirs("uploads/profiles", exist_ok=True)
+os.makedirs("uploads/selfies", exist_ok=True)
+os.makedirs("uploads/signatures", exist_ok=True)
 
 templates = Jinja2Templates(directory="templates")
 
-class RedirectException(Exception):
-    def __init__(self, url: str, status_code: int = 302):
-        self.url = url
-        self.status_code = status_code
+# ---------------------------------------------------------------------------
+# Middleware
+# ---------------------------------------------------------------------------
+app.add_middleware(AppErrorHandlerMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
-@app.exception_handler(RedirectException)
-async def redirect_exception_handler(request: Request, exc: RedirectException):
-    return RedirectResponse(url=exc.url, status_code=exc.status_code)
 
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        token = request.cookies.get(COOKIE_NAME)
+        user = auth_decode_token(token) if token else None
+        request.state.user = user
+        return await call_next(request)
+
+
+app.add_middleware(AuthMiddleware)
+
+# ---------------------------------------------------------------------------
+# Startup
+# ---------------------------------------------------------------------------
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-key-change-this-in-env")
-JWT_ALGORITHM = "HS256"
-COOKIE_NAME = "session_token"
-CSRF_COOKIE_NAME = "csrf_token"
+configure_jwt(JWT_SECRET)
+
+# Re-export for test compatibility
+create_access_token = auth_create_token
+COOKIE_NAME = auth_service.COOKIE_NAME
+CSRF_COOKIE_NAME = auth_service.CSRF_COOKIE_NAME
+JWT_ALGORITHM = auth_service.JWT_ALGORITHM
 
 SUCCESS_MESSAGE_MAP = {
     "created": "Election created successfully!",
@@ -89,43 +112,45 @@ SUCCESS_MESSAGE_MAP = {
     "deleted": "Election removed successfully!",
 }
 
-class AuthMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        token = request.cookies.get(COOKIE_NAME)
-        user = None
-        if token:
-            try:
-                payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-                user = payload
-            except jwt.PyJWTError:
-                user = None
+CSRF_COOKIE_NAME = auth_service.CSRF_COOKIE_NAME
 
-        request.state.user = user
-        response = await call_next(request)
-        return response
 
-app.add_middleware(AuthMiddleware)
+class RedirectError(Exception):
+    def __init__(self, url: str, status_code: int = 302):
+        self.url = url
+        self.status_code = status_code
 
-def create_access_token(data: dict):
-    payload = data.copy()
-    expire = datetime.now(UTC) + timedelta(hours=24)
-    payload.update({"exp": expire})
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
-def decode_access_token(token: str):
-    try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-    except jwt.PyJWTError:
-        return None
+@app.exception_handler(RedirectError)
+async def redirect_exception_handler(request: Request, exc: RedirectError):
+    return RedirectResponse(url=exc.url, status_code=exc.status_code)
 
-def generate_csrf_token():
-    return secrets.token_urlsafe(32)
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+async def get_current_user(request: Request):
+    return request.state.user
+
+
+async def admin_guard(request: Request, user=Depends(get_current_user)):
+    if not user or user.get("role", "").upper() != "ADMIN":
+        raise RedirectError(url="/admin/login")
+    return user
+
+
+async def student_guard(request: Request, user=Depends(get_current_user)):
+    if not user or user.get("role", "").upper() != "STUDENT":
+        raise RedirectError(url="/login")
+    return user
+
 
 async def get_csrf_token(request: Request):
     token = request.cookies.get(CSRF_COOKIE_NAME)
     if not token:
-        token = generate_csrf_token()
+        token = auth_service.generate_csrf_token()
     return token
+
 
 async def verify_csrf(request: Request, csrf_token: str = Form(None)):
     cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
@@ -134,346 +159,171 @@ async def verify_csrf(request: Request, csrf_token: str = Form(None)):
         raise HTTPException(status_code=403, detail="CSRF token missing or invalid")
     return csrf_token
 
-def get_election_by_id(election_id: int):
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id, title, description, start_time, end_time, result_published, status FROM elections WHERE id = %s", (election_id,))
-        election = cursor.fetchone()
-        if election:
-            election['start_time'] = ensure_datetime(election['start_time'])
-            election['end_time'] = ensure_datetime(election['end_time'])
-            election['status'] = compute_election_status(election['start_time'], election['end_time'])
-        return election
 
-def has_user_applied(user_id: int, election_id: int) -> bool:
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id FROM candidate_applications WHERE user_id = %s AND election_id = %s", (user_id, election_id))
-        return cursor.fetchone() is not None
+def set_csrf_cookie(response, csrf_token: str):
+    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
 
-def has_user_voted(user_id: int, election_id: int) -> bool:
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            "SELECT 1 FROM votes WHERE voter_id = %s AND election_id = %s LIMIT 1",
-            (user_id, election_id)
-        )
-        return cursor.fetchone() is not None
 
-def get_approved_candidates_for_election(election_id: int):
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT
-                ca.id,
-                ca.user_id,
-                ca.election_id,
-                ca.manifesto,
-                u.full_name AS candidate_name,
-                u.department,
-                u.academic_year
-            FROM candidate_applications ca
-            JOIN users u ON ca.user_id = u.user_id
-            WHERE ca.election_id = %s AND ca.approval_status = 'APPROVED'
-            ORDER BY u.full_name ASC
-            """,
-            (election_id,)
-        )
-        return cursor.fetchall()
-
-def get_approved_candidate_for_vote(candidate_application_id: int, election_id: int):
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT id, user_id, election_id, approval_status
-            FROM candidate_applications
-            WHERE id = %s AND election_id = %s AND approval_status = 'APPROVED'
-            LIMIT 1
-            """,
-            (candidate_application_id, election_id)
-        )
-        return cursor.fetchone()
-
-def get_election_results(election_id: int):
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT
-                ca.id           AS candidate_application_id,
-                u.full_name     AS candidate_name,
-                u.department    AS department,
-                u.academic_year AS academic_year,
-                ca.manifesto    AS manifesto,
-                COUNT(v.candidate_id) AS vote_count
-            FROM candidate_applications ca
-            JOIN users u ON ca.user_id = u.user_id
-            LEFT JOIN votes v
-                ON v.candidate_id = ca.id AND v.election_id = ca.election_id
-            WHERE ca.election_id = %s AND ca.approval_status = 'APPROVED'
-            GROUP BY ca.id, u.full_name, u.department, u.academic_year, ca.manifesto
-            ORDER BY vote_count DESC, u.full_name ASC
-            """,
-            (election_id,)
-        )
-        rows = cursor.fetchall()
-    total = sum(r["vote_count"] for r in rows)
-    for r in rows:
-        r["percentage"] = (r["vote_count"] / total * 100) if total else 0.0
-    return rows, total
-
-def mark_voting_session_completed(user_id: int, election_id: int):
-    try:
-        with get_db_cursor() as cursor:
-            cursor.execute(
-                """
-                UPDATE voting_sessions
-                SET completed = 1
-                WHERE student_id = %s AND election_id = %s AND completed = 0
-                """,
-                (user_id, election_id)
-            )
-    except Exception:
-        logger.info("Voting sessions table was not updated for election %s and user %s", election_id, user_id)
-
-async def get_current_user(request: Request):
-    token = request.cookies.get(COOKIE_NAME)
-    if not token:
-        return None
-    payload = decode_access_token(token)
-    if not payload:
-        return None
-    return payload
-
-async def admin_guard(request: Request, user = Depends(get_current_user)):
-    if not user or user['role'].upper() != 'ADMIN':
-        raise RedirectException(url="/admin/login")
-    return user
-
-async def student_guard(request: Request, user = Depends(get_current_user)):
-    if not user or user['role'].upper() != 'STUDENT':
-        raise RedirectException(url="/login")
-    return user
-
-@app.get("/debug-role")
+# ---------------------------------------------------------------------------
+# Auth Routes
+# ---------------------------------------------------------------------------
+@app.get("/debug-role", tags=["Auth"])
 async def debug_role(request: Request):
-    return {"role": request.state.user.get('role') if request.state.user else "None"}
+    return {"role": request.state.user.get("role") if request.state.user else "None"}
 
-@app.get("/", response_class=HTMLResponse)
+
+@app.get("/", response_class=HTMLResponse, tags=["Pages"])
 async def home(request: Request):
     user = request.state.user
     if user:
-        return RedirectResponse(url="/admin/dashboard" if user['role'].upper() == "ADMIN" else "/student/dashboard", status_code=302)
-    return templates.TemplateResponse(
-        request,
-        "register.html",
-        {"request": request}
-    )
+        return RedirectResponse(
+            url="/admin/dashboard" if user["role"].upper() == "ADMIN" else "/student/dashboard",
+            status_code=302,
+        )
+    return templates.TemplateResponse(request, "register.html", {"request": request})
 
-@app.get("/register", response_class=HTMLResponse)
-async def register_page(request: Request, user = Depends(get_current_user)):
+
+@app.get("/register", response_class=HTMLResponse, tags=["Auth"])
+async def register_page(request: Request, user=Depends(get_current_user)):
     if user:
-        return RedirectResponse(url="/admin/dashboard" if user['role'].upper() == "ADMIN" else "/student/dashboard", status_code=302)
-    return templates.TemplateResponse(
-        request,
-        "register.html",
-        {"request": request}
-    )
+        return RedirectResponse(
+            url="/admin/dashboard" if user["role"].upper() == "ADMIN" else "/student/dashboard",
+            status_code=302,
+        )
+    return templates.TemplateResponse(request, "register.html", {"request": request})
 
-@app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, user = Depends(get_current_user)):
+
+@app.get("/login", response_class=HTMLResponse, tags=["Auth"])
+async def login_page(request: Request, user=Depends(get_current_user)):
     if user:
-        return RedirectResponse(url="/admin/dashboard" if user['role'].upper() == "ADMIN" else "/student/dashboard", status_code=302)
-    return templates.TemplateResponse(
-        request,
-        "login.html",
-        {"request": request}
-    )
+        return RedirectResponse(
+            url="/admin/dashboard" if user["role"].upper() == "ADMIN" else "/student/dashboard",
+            status_code=302,
+        )
+    return templates.TemplateResponse(request, "login.html", {"request": request})
 
-@app.get("/admin/login", response_class=HTMLResponse)
+
+@app.get("/admin/login", response_class=HTMLResponse, tags=["Auth"])
 async def admin_login_page(request: Request):
-    return templates.TemplateResponse(
-        request,
-        "admin-login.html",
-        {"request": request}
-    )
+    return templates.TemplateResponse(request, "admin-login.html", {"request": request})
 
-@app.post("/auth/register")
+
+@app.post("/auth/register", tags=["Auth"])
 async def register_user(
     request: Request,
     full_name: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
     department: str = Form(...),
-    academic_year: str = Form(...)
+    academic_year: str = Form(...),
 ):
     try:
-        hashed_password = generate_password_hash(password)
-        if not validate_email(email):
-            return templates.TemplateResponse(
-                request,
-                "register.html",
-                {"request": request, "error": "Invalid email format."}
-            )
-        if len(password) < 8:
-            return templates.TemplateResponse(
-                request,
-                "register.html",
-                {"request": request, "error": "Password must be at least 8 characters long."}
-            )
-
-        with get_db_cursor() as cursor:
-            cursor.execute("SELECT user_id FROM users WHERE email = %s", (email,))
-            if cursor.fetchone():
-                return templates.TemplateResponse(
-                    request,
-                    "register.html",
-                    {"request": request, "error": "Email already registered."}
-                )
-
-            query = """
-            INSERT INTO users (full_name, email, password_hash, department, academic_year, role)
-            VALUES (%s, %s, %s, %s, %s, 'STUDENT')
-            """
-            cursor.execute(query, (full_name, email, hashed_password, department, academic_year))
-
+        result = auth_service.register_user(full_name, email, password, department, academic_year)
         return templates.TemplateResponse(
             request,
             "register.html",
-            {"request": request, "success": "Registration successful! You can now login."}
+            {"request": request, "success": result["message"]},
         )
-
+    except ValidationError as e:
+        return templates.TemplateResponse(
+            request,
+            "register.html",
+            {"request": request, "error": str(e)},
+        )
     except Exception:
+        logger.exception("Registration failed")
         return templates.TemplateResponse(
             request,
             "register.html",
-            {"request": request, "error": "An internal error occurred. Please try again."}
+            {"request": request, "error": "An internal error occurred. Please try again."},
         )
 
-@app.post("/auth/login")
-async def login_user(
-    request: Request,
-    email: str = Form(...),
-    password: str = Form(...)
-):
+
+@app.post("/auth/login", tags=["Auth"])
+async def login_user(request: Request, email: str = Form(...), password: str = Form(...)):
     try:
-        if not validate_email(email):
-            return templates.TemplateResponse(
-                request,
-                "login.html",
-                {"request": request, "error": "Invalid email format."}
-            )
-
-        with get_db_cursor() as cursor:
-            cursor.execute("SELECT user_id, email, password_hash, role FROM users WHERE email = %s", (email,))
-            user = cursor.fetchone()
-
-        if not user or not check_password_hash(user['password_hash'], password):
-            return templates.TemplateResponse(
-                request,
-                "login.html" if "/admin/" not in str(request.url) else "admin-login.html",
-                {"request": request, "error": "Invalid email or password."}
-            )
-
-        token = create_access_token({"user_id": user['user_id'], "role": user['role'], "email": user['email']})
-
+        result = auth_service.authenticate_user(email, password)
         response = RedirectResponse(
-            url=("/admin/dashboard?login=success" if user['role'].upper() == "ADMIN" else "/student/dashboard?login=success"),
-            status_code=303
+            url="/student/dashboard?login=success",
+            status_code=303,
         )
         response.set_cookie(
-            key=COOKIE_NAME,
-            value=token,
+            key=auth_service.COOKIE_NAME,
+            value=result["token"],
             httponly=True,
             samesite="lax",
-            secure=True
+            secure=True,
         )
         return response
-
-    except Exception:
+    except AuthError as e:
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"request": request, "error": "An internal error occurred. Please try again."}
+            {"request": request, "error": str(e)},
+        )
+    except Exception:
+        logger.exception("Login failed")
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"request": request, "error": "An internal error occurred. Please try again."},
         )
 
-@app.post("/auth/admin-login")
-async def admin_login_user(
-    request: Request,
-    email: str = Form(...),
-    password: str = Form(...)
-):
+
+@app.post("/auth/admin-login", tags=["Auth"])
+async def admin_login_user(request: Request, email: str = Form(...), password: str = Form(...)):
     try:
-        if not validate_email(email):
-            return templates.TemplateResponse(
-                request,
-                "admin-login.html",
-                {"request": request, "error": "Invalid email format."}
-            )
-
-        with get_db_cursor() as cursor:
-            cursor.execute("SELECT user_id, email, password_hash, role FROM users WHERE email = %s", (email,))
-            user = cursor.fetchone()
-
-        if not user or not check_password_hash(user['password_hash'], password):
-            return templates.TemplateResponse(
-                request,
-                "admin-login.html",
-                {"request": request, "error": "Invalid email or password."}
-            )
-
-        if user['role'].upper() != "ADMIN":
-            return templates.TemplateResponse(
-                request,
-                "admin-login.html",
-                {"request": request, "error": "Administrator access required."}
-            )
-
-        token = create_access_token({"user_id": user['user_id'], "role": user['role'], "email": user['email']})
-
+        result = auth_service.authenticate_user(email, password, require_admin=True)
         response = RedirectResponse(url="/admin/dashboard?login=success", status_code=303)
         response.set_cookie(
-            key=COOKIE_NAME,
-            value=token,
+            key=auth_service.COOKIE_NAME,
+            value=result["token"],
             httponly=True,
             samesite="lax",
-            secure=True
+            secure=True,
         )
         return response
-
-    except Exception:
+    except AuthError as e:
         return templates.TemplateResponse(
             request,
             "admin-login.html",
-            {"request": request, "error": "An internal error occurred. Please try again."}
+            {"request": request, "error": str(e)},
+        )
+    except Exception:
+        logger.exception("Admin login failed")
+        return templates.TemplateResponse(
+            request,
+            "admin-login.html",
+            {"request": request, "error": "An internal error occurred. Please try again."},
         )
 
-@app.get("/auth/logout")
+
+@app.get("/auth/logout", tags=["Auth"])
 async def logout_user():
     response = RedirectResponse(url="/login", status_code=302)
-    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(auth_service.COOKIE_NAME)
     return response
 
-@app.get("/student/dashboard", response_class=HTMLResponse)
-async def student_dashboard(request: Request, user = Depends(get_current_user)):
-    if not user or user['role'].upper() != 'STUDENT':
+
+# ---------------------------------------------------------------------------
+# Student Routes
+# ---------------------------------------------------------------------------
+@app.get("/student/dashboard", response_class=HTMLResponse, tags=["Student"])
+async def student_dashboard(request: Request, user=Depends(get_current_user)):
+    if not user or user.get("role", "").upper() != "STUDENT":
         return RedirectResponse(url="/login", status_code=302)
-    with get_db_cursor() as cursor:
-        try:
-            cursor.execute("SELECT COUNT(*) as count FROM elections WHERE start_time <= NOW() AND end_time > NOW()")
-            active_count = cursor.fetchone()['count']
-        except Exception:
-            active_count = 0
-        try:
-            cursor.execute(
-                "SELECT approval_status FROM candidate_applications WHERE user_id = %s ORDER BY applied_at DESC LIMIT 1",
-                (user['user_id'],)
-            )
-            row = cursor.fetchone()
-            candidacy_status = row['approval_status'] if row else None
-        except Exception:
-            candidacy_status = None
-        try:
-            cursor.execute("SELECT COUNT(*) as count FROM votes WHERE voter_id = %s", (user['user_id'],))
-            votes_cast = cursor.fetchone()['count']
-        except Exception:
-            votes_cast = 0
+    try:
+        active_count = get_active_elections_count()
+    except Exception:
+        active_count = 0
+    try:
+        candidacy_status = get_student_candidacy_status(user["user_id"])
+    except Exception:
+        candidacy_status = None
+    try:
+        votes_cast = get_user_vote_count(user["user_id"])
+    except Exception:
+        votes_cast = 0
     return templates.TemplateResponse(
         request=request,
         name="student_dashboard.html",
@@ -481,76 +331,59 @@ async def student_dashboard(request: Request, user = Depends(get_current_user)):
             "user": user,
             "active_count": active_count,
             "candidacy_status": candidacy_status,
-            "votes_cast": votes_cast
-        }
+            "votes_cast": votes_cast,
+        },
     )
 
-@app.get("/student/elections", response_class=HTMLResponse)
-async def student_elections_list(request: Request, user = Depends(student_guard)):
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id, title, description, start_time, end_time FROM elections ORDER BY start_time ASC")
-        elections = cursor.fetchall()
-        for e in elections:
-            e['start_time'] = ensure_datetime(e['start_time'])
-            e['end_time'] = ensure_datetime(e['end_time'])
-            e['status'] = compute_election_status(e['start_time'], e['end_time'])
 
-    active = [e for e in elections if e['status'] == 'ACTIVE']
-    upcoming = [e for e in elections if e['status'] == 'UPCOMING']
-    ended = [e for e in elections if e['status'] == 'ENDED']
-
+@app.get("/student/elections", response_class=HTMLResponse, tags=["Student"])
+async def student_elections_list(request: Request, user=Depends(student_guard)):
+    elections = get_all_elections()
+    active = [e for e in elections if e["status"] == "ACTIVE"]
+    upcoming = [e for e in elections if e["status"] == "UPCOMING"]
+    ended = [e for e in elections if e["status"] == "ENDED"]
     return templates.TemplateResponse(
         request,
         "student_elections.html",
-        {"request": request, "active": active, "upcoming": upcoming, "ended": ended, "user": user}
+        {"request": request, "active": active, "upcoming": upcoming, "ended": ended, "user": user},
     )
 
-@app.get("/student/elections/apply", response_class=HTMLResponse)
-async def student_election_apply_list(request: Request, user = Depends(student_guard)):
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id, title, description, start_time, end_time FROM elections WHERE start_time > NOW() ORDER BY start_time ASC")
-        upcoming = cursor.fetchall()
-        for e in upcoming:
-            e['start_time'] = ensure_datetime(e['start_time'])
-            e['end_time'] = ensure_datetime(e['end_time'])
-            e['status'] = 'UPCOMING'
 
+@app.get("/student/elections/apply", response_class=HTMLResponse, tags=["Student"])
+async def student_election_apply_list(request: Request, user=Depends(student_guard)):
+    upcoming = get_upcoming_elections()
     return templates.TemplateResponse(
         request,
         "student_election_apply_list.html",
-        {"request": request, "upcoming": upcoming, "user": user}
+        {"request": request, "upcoming": upcoming, "user": user},
     )
 
-@app.get("/student/elections/{id}", response_class=HTMLResponse)
-async def student_election_detail(request: Request, id: int, user = Depends(student_guard)):
+
+@app.get("/student/elections/{id}", response_class=HTMLResponse, tags=["Student"])
+async def student_election_detail(request: Request, id: int, user=Depends(student_guard)):
     election = get_election_by_id(id)
     if not election:
         return RedirectResponse(url="/student/elections", status_code=302)
-
-    has_applied = has_user_applied(user['user_id'], id)
-    has_voted = has_user_voted(user['user_id'], id)
+    has_applied = has_user_applied(user["user_id"], id)
+    has_voted = has_user_voted(user["user_id"], id)
     success_message = None
     error_message = None
     info_message = None
     success_key = request.query_params.get("success")
     error_key = request.query_params.get("error")
     info_key = request.query_params.get("info")
-
     if success_key == "voted":
         success_message = "Your vote has been recorded."
     elif success_key == "already_voted":
         success_message = "You have already voted in this election."
-
     if error_key == "already_voted":
         error_message = "You have already voted in this election."
     elif error_key == "invalid_candidate":
         error_message = "Please select an approved candidate from this election."
     elif error_key == "inactive":
         error_message = "Voting is only available while the election is active."
-
     if info_key == "not_published":
         info_message = "The results for this election have not been published yet."
-
     return templates.TemplateResponse(
         request,
         "student_election_detail.html",
@@ -563,42 +396,40 @@ async def student_election_detail(request: Request, id: int, user = Depends(stud
             "success_message": success_message,
             "error_message": error_message,
             "info_message": info_message,
-        }
+        },
     )
 
-@app.get("/student/elections/{id}/apply", response_class=HTMLResponse)
-async def student_election_apply_page(request: Request, id: int, user = Depends(student_guard)):
+
+@app.get("/student/elections/{id}/apply", response_class=HTMLResponse, tags=["Student"])
+async def student_election_apply_page(request: Request, id: int, user=Depends(student_guard)):
     election = get_election_by_id(id)
     if not election:
         return RedirectResponse(url="/student/elections", status_code=302)
-
-    if election['status'] != 'UPCOMING':
+    if election.get("status") != "UPCOMING":
         return RedirectResponse(url="/student/elections", status_code=302)
-
-    if has_user_applied(user['user_id'], id):
+    if has_user_applied(user["user_id"], id):
         return RedirectResponse(url="/student/candidate-status", status_code=302)
-
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "student_election_apply.html",
-        {"request": request, "election": election, "user": user, "csrf_token": csrf_token}
+        {"request": request, "election": election, "user": user, "csrf_token": csrf_token},
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
-@app.get("/student/elections/{id}/vote", response_class=HTMLResponse)
-async def student_election_vote_page(request: Request, id: int, user = Depends(student_guard)):
+
+@app.get("/student/elections/{id}/vote", response_class=HTMLResponse, tags=["Student"])
+async def student_election_vote_page(request: Request, id: int, user=Depends(student_guard)):
     election = get_election_by_id(id)
     if not election:
         return RedirectResponse(url="/student/elections", status_code=302)
-
     if election["status"] != "ACTIVE":
         return RedirectResponse(url=f"/student/elections/{id}?error=inactive", status_code=302)
-
     if has_user_voted(user["user_id"], id):
-        return RedirectResponse(url=f"/student/elections/{id}?success=already_voted", status_code=302)
-
+        return RedirectResponse(
+            url=f"/student/elections/{id}?success=already_voted", status_code=302
+        )
     approved_candidates = get_approved_candidates_for_election(id)
     error_key = request.query_params.get("error")
     error_message = None
@@ -606,7 +437,6 @@ async def student_election_vote_page(request: Request, id: int, user = Depends(s
         error_message = "Please select an approved candidate from this election."
     elif error_key == "internal":
         error_message = "An internal error occurred. Please try again."
-
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
@@ -617,115 +447,199 @@ async def student_election_vote_page(request: Request, id: int, user = Depends(s
             "user": user,
             "approved_candidates": approved_candidates,
             "csrf_token": csrf_token,
-            "error_message": error_message
-        }
+            "error_message": error_message,
+        },
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
-@app.post("/student/elections/{id}/vote")
+
+@app.post("/student/elections/{id}/vote", tags=["Student"])
 async def submit_student_vote(
     request: Request,
     id: int,
     candidate_application_id: int = Form(...),
-    user = Depends(student_guard),
-    csrf_token = Depends(verify_csrf)
+    user=Depends(student_guard),
+    csrf_token=Depends(verify_csrf),
 ):
-    election = get_election_by_id(id)
-    if not election:
-        return RedirectResponse(url="/student/elections", status_code=302)
-
-    if election["status"] != "ACTIVE":
-        return RedirectResponse(url=f"/student/elections/{id}?error=inactive", status_code=303)
-
-    if has_user_voted(user["user_id"], id):
-        return RedirectResponse(url=f"/student/elections/{id}?success=already_voted", status_code=303)
-
-    candidate = get_approved_candidate_for_vote(candidate_application_id, id)
-    if not candidate:
-        return RedirectResponse(url=f"/student/elections/{id}/vote?error=invalid_candidate", status_code=303)
-
     try:
-        with get_db_cursor() as cursor:
-            # Ensure session exists and update it with the chosen candidate
-            cursor.execute(
-                "INSERT INTO voting_sessions (student_id, election_id, started_at, expires_at, completed, candidate_application_id) "
-                "VALUES (%s, %s, %s, %s, 0, %s) "
-                "ON DUPLICATE KEY UPDATE candidate_application_id = %s, started_at = %s, expires_at = %s",
-                (user["user_id"], id, datetime.now(UTC), datetime.now(UTC) + timedelta(minutes=15), candidate_application_id,
-                 candidate_application_id, datetime.now(UTC), datetime.now(UTC) + timedelta(minutes=15))
-            )
+        create_voting_session(user["user_id"], id, candidate_application_id)
+    except (ElectionError, VoteError) as e:
+        return RedirectResponse(
+            url=f"/student/elections/{id}/vote?error={e.message.lower().replace(' ', '_')}",
+            status_code=303,
+        )
     except Exception:
-        logger.exception("Failed to record session choice")
+        logger.exception("Failed to create voting session")
         return RedirectResponse(url=f"/student/elections/{id}/vote?error=internal", status_code=303)
-
     return RedirectResponse(url=f"/student/elections/{id}/verify", status_code=303)
 
-@app.post("/candidates/apply")
-async def apply_as_candidate(
+
+@app.post("/candidates/apply", tags=["Student"])
+async def apply_as_candidate_route(
     request: Request,
     election_id: int = Form(...),
     manifesto: str = Form(...),
-    user = Depends(student_guard),
-    csrf_token = Depends(verify_csrf)
+    user=Depends(student_guard),
+    csrf_token=Depends(verify_csrf),
 ):
-    election = get_election_by_id(election_id)
-    if not election or election['status'] != 'UPCOMING':
-        return RedirectResponse(url="/student/elections", status_code=302)
-
-    if has_user_applied(user['user_id'], election_id):
-        return RedirectResponse(url="/student/candidate-status", status_code=302)
-
-    with get_db_cursor() as cursor:
-        query = "INSERT INTO candidate_applications (user_id, election_id, manifesto, approval_status) VALUES (%s, %s, %s, 'PENDING')"
-        cursor.execute(query, (user['user_id'], election_id, manifesto))
-
+    try:
+        apply_as_candidate(user["user_id"], election_id, manifesto)
+    except ValidationError:
+        pass
     return RedirectResponse(url="/student/candidate-status", status_code=303)
 
-@app.get("/student/candidate-status", response_class=HTMLResponse)
-async def student_candidate_status(request: Request, user = Depends(student_guard)):
-    with get_db_cursor() as cursor:
-        query = """
-        SELECT ca.id, ca.approval_status, ca.applied_at, e.title as election_title
-        FROM candidate_applications ca
-        JOIN elections e ON ca.election_id = e.id
-        WHERE ca.user_id = %s
-        ORDER BY ca.applied_at DESC
-        """
-        cursor.execute(query, (user['user_id'],))
-        applications = cursor.fetchall()
-        for app in applications:
-            app['applied_at'] = format_datetime_simple(app['applied_at'])
 
+@app.get("/student/candidate-status", response_class=HTMLResponse, tags=["Student"])
+async def student_candidate_status(request: Request, user=Depends(student_guard)):
+    applications = get_user_applications(user["user_id"])
     return templates.TemplateResponse(
         request,
         "student_candidate_status.html",
-        {"request": request, "applications": applications, "user": user}
+        {"request": request, "applications": applications, "user": user},
     )
 
-@app.get("/admin/dashboard", response_class=HTMLResponse)
-async def admin_dashboard(request: Request, user = Depends(admin_guard)):
-    with get_db_cursor() as cursor:
-        try:
-            cursor.execute("SELECT COUNT(*) as count FROM users WHERE role = 'STUDENT'")
-            total_students = cursor.fetchone()['count']
-        except Exception:
-            total_students = 0
 
-        try:
-            cursor.execute("SELECT COUNT(*) as count FROM elections WHERE start_time <= NOW() AND end_time > NOW()")
-            active_elections = cursor.fetchone()['count']
-        except Exception:
-            active_elections = 0
+@app.get("/student/elections/{id}/results", response_class=HTMLResponse, tags=["Student"])
+async def student_election_results(request: Request, id: int, user=Depends(student_guard)):
+    election = get_election_by_id(id)
+    if not election:
+        raise HTTPException(status_code=404, detail="Election not found")
+    if election["status"] != "ENDED" or not election["result_published"]:
+        return RedirectResponse(url=f"/student/elections/{id}?info=not_published", status_code=302)
+    results, total_votes = get_election_results(id)
+    return templates.TemplateResponse(
+        request,
+        "student_election_results.html",
+        {
+            "request": request,
+            "user": user,
+            "election": election,
+            "results": results,
+            "total_votes": total_votes,
+        },
+    )
 
-        try:
-            cursor.execute("SELECT COUNT(*) as count FROM candidate_applications WHERE approval_status = 'PENDING'")
-            pending_apps = cursor.fetchone()['count']
-        except Exception:
-            pending_apps = 0
 
-        try:
-            cursor.execute("""
+@app.get("/student/results", response_class=HTMLResponse, tags=["Student"])
+async def student_results_overview(request: Request, user=Depends(student_guard)):
+    elections = get_published_ended_elections()
+    election_results = []
+    for election in elections:
+        results, total_votes = get_election_results(election["id"])
+        election_results.append(
+            {"election": election, "results": results, "total_votes": total_votes}
+        )
+    return templates.TemplateResponse(
+        request,
+        "student_results.html",
+        {"request": request, "user": user, "election_results": election_results},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Student Verification Routes
+# ---------------------------------------------------------------------------
+@app.get("/student/elections/{id}/verify", response_class=HTMLResponse, tags=["Student"])
+async def student_election_verify_page(request: Request, id: int, user=Depends(student_guard)):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/student/elections", status_code=302)
+    if election["status"] != "ACTIVE":
+        return RedirectResponse(url=f"/student/elections/{id}?error=inactive", status_code=302)
+    if has_user_voted(user["user_id"], id):
+        return RedirectResponse(
+            url=f"/student/elections/{id}?success=already_voted", status_code=302
+        )
+    session = get_active_session(user["user_id"], id)
+    if not session or not session.get("candidate_application_id"):
+        return RedirectResponse(url=f"/student/elections/{id}/vote?error=internal", status_code=302)
+    expires_at = ensure_datetime(session["expires_at"])
+    if expires_at and expires_at < datetime.now(UTC):
+        return RedirectResponse(
+            url=f"/student/elections/{id}/vote?error=session_expired", status_code=302
+        )
+    error_key = request.query_params.get("error")
+    error_message = None
+    if error_key == "invalid_file":
+        error_message = "Invalid file format. Please upload a JPG, JPEG, or PNG image."
+    elif error_key == "session_expired":
+        error_message = "Your voting session has expired. Please select your candidate again."
+    elif error_key == "internal":
+        error_message = "An internal error occurred during verification. Please try again."
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "student_election_verify.html",
+        {
+            "request": request,
+            "election": election,
+            "user": user,
+            "csrf_token": csrf_token,
+            "error_message": error_message,
+        },
+    )
+    set_csrf_cookie(response, csrf_token)
+    return response
+
+
+@app.post("/student/elections/{id}/verify", tags=["Student"])
+async def submit_student_verification(
+    request: Request,
+    id: int,
+    verification_type: str = Form(...),
+    verification_file: UploadFile = File(...),
+    user=Depends(student_guard),
+    csrf_token=Depends(verify_csrf),
+):
+    if verification_type not in ("SELFIE", "SIGNATURE"):
+        return RedirectResponse(
+            url=f"/student/elections/{id}/verify?error=internal", status_code=303
+        )
+    try:
+        file_path = validate_and_save_verification_file(
+            user["user_id"], id, verification_type, verification_file
+        )
+    except ValidationError:
+        return RedirectResponse(
+            url=f"/student/elections/{id}/verify?error=invalid_file", status_code=303
+        )
+    except Exception:
+        logger.exception("File save failed")
+        return RedirectResponse(
+            url=f"/student/elections/{id}/verify?error=internal", status_code=303
+        )
+    try:
+        submit_vote_with_verification(user["user_id"], id, verification_type, file_path)
+    except Exception:
+        logger.exception("Vote submission failed after file save")
+        return RedirectResponse(
+            url=f"/student/elections/{id}/verify?error=internal", status_code=303
+        )
+    return RedirectResponse(url=f"/student/elections/{id}?success=voted", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Admin Routes
+# ---------------------------------------------------------------------------
+@app.get("/admin/dashboard", response_class=HTMLResponse, tags=["Admin"])
+async def admin_dashboard(request: Request, user=Depends(admin_guard)):
+    try:
+        total_students = get_student_count()
+    except Exception:
+        total_students = 0
+    try:
+        active_elections = get_active_elections_count()
+    except Exception:
+        active_elections = 0
+    try:
+        pending_apps = get_pending_count()
+    except Exception:
+        pending_apps = 0
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                """
                 (SELECT u.full_name, 'candidacy' as action_type, ca.applied_at as acted_at
                  FROM candidate_applications ca
                  JOIN users u ON ca.user_id = u.user_id
@@ -741,11 +655,11 @@ async def admin_dashboard(request: Request, user = Depends(admin_guard)):
                  JOIN users u ON e.created_by = u.user_id
                  ORDER BY e.created_at DESC LIMIT 5)
                 ORDER BY acted_at DESC LIMIT 10
-            """)
+                """
+            )
             recent_activity = cursor.fetchall()
-        except Exception:
-            recent_activity = []
-
+    except Exception:
+        recent_activity = []
     return templates.TemplateResponse(
         request=request,
         name="admin_dashboard.html",
@@ -754,125 +668,143 @@ async def admin_dashboard(request: Request, user = Depends(admin_guard)):
             "stats": {
                 "total_students": total_students,
                 "active_elections": active_elections,
-                "pending_apps": pending_apps
+                "pending_apps": pending_apps,
             },
-            "recent_activity": recent_activity
-        }
+            "recent_activity": recent_activity,
+        },
     )
 
-@app.get("/admin/elections", response_class=HTMLResponse)
-async def list_elections(request: Request, user = Depends(admin_guard)):
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT id, title, description, start_time, end_time, status, result_published FROM elections ORDER BY created_at DESC")
-        elections = cursor.fetchall()
-        for e in elections:
-            e['start_time'] = ensure_datetime(e['start_time'])
-            e['end_time'] = ensure_datetime(e['end_time'])
-            e['status'] = compute_election_status(e['start_time'], e['end_time'])
 
+@app.get("/admin/elections", response_class=HTMLResponse, tags=["Admin"])
+async def list_elections(request: Request, user=Depends(admin_guard)):
+    elections = get_all_elections()
     success_key = request.query_params.get("success")
-    success_message = SUCCESS_MESSAGE_MAP.get(success_key, None) if success_key else None
-
+    success_message = SUCCESS_MESSAGE_MAP.get(success_key) if success_key else None
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "admin_elections.html",
-        {"request": request, "elections": elections, "success_message": success_message, "csrf_token": csrf_token}
+        {
+            "request": request,
+            "elections": elections,
+            "success_message": success_message,
+            "csrf_token": csrf_token,
+        },
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
-@app.get("/admin/elections/create", response_class=HTMLResponse)
-async def create_election_page(request: Request, user = Depends(admin_guard)):
+@app.get("/admin/elections/create", response_class=HTMLResponse, tags=["Admin"])
+async def create_election_page(request: Request, user=Depends(admin_guard)):
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "admin_election_create.html",
-        {"request": request, "csrf_token": csrf_token}
+        {"request": request, "csrf_token": csrf_token},
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
-@app.post("/admin/elections")
-async def create_election(
+@app.post("/admin/elections", tags=["Admin"])
+async def create_election_route(
     request: Request,
     title: str | None = Form(None),
     description: str | None = Form(None),
     start_time: str | None = Form(None),
     end_time: str | None = Form(None),
-    user = Depends(admin_guard),
-    csrf_token = Depends(verify_csrf)
+    user=Depends(admin_guard),
+    csrf_token=Depends(verify_csrf),
 ):
     if not title or not start_time or not end_time:
         csrf_token = await get_csrf_token(request)
         response = templates.TemplateResponse(
             request,
             "admin_election_create.html",
-            {"request": request, "error": "Title, start time, and end time are required.", "csrf_token": csrf_token}
+            {
+                "request": request,
+                "error": "Title, start time, and end time are required.",
+                "csrf_token": csrf_token,
+                "values": {
+                    "title": title,
+                    "description": description,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                },
+            },
         )
-        response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+        set_csrf_cookie(response, csrf_token)
         return response
-
     try:
-        s_time = datetime.strptime(start_time, '%Y-%m-%dT%H:%M')
-        e_time = datetime.strptime(end_time, '%Y-%m-%dT%H:%M')
-
-
-        if e_time <= s_time:
-            csrf_token = await get_csrf_token(request)
-            response = templates.TemplateResponse(
-                request,
-                "admin_election_create.html",
-                {"request": request, "error": "End time must be after start time.", "values": {"title": title, "description": description, "start_time": start_time, "end_time": end_time}, "csrf_token": csrf_token}
-            )
-            response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
-            return response
-
-        status = compute_election_status(s_time, e_time)
-        with get_db_cursor() as cursor:
-            query = "INSERT INTO elections (title, description, start_time, end_time, status, created_by) VALUES (%s, %s, %s, %s, %s, %s)"
-            cursor.execute(query, (title, description, s_time, e_time, status, user['user_id']))
-
+        create_election(title, description, start_time, end_time, user["user_id"])
         return RedirectResponse(url="/admin/elections?success=created", status_code=303)
-
-    except Exception:
+    except ValidationError as e:
         csrf_token = await get_csrf_token(request)
         response = templates.TemplateResponse(
             request,
             "admin_election_create.html",
-            {"request": request, "error": "An internal error occurred. Please try again.", "values": {"title": title, "description": description, "start_time": start_time, "end_time": end_time}, "csrf_token": csrf_token}
+            {
+                "request": request,
+                "error": str(e),
+                "csrf_token": csrf_token,
+                "values": {
+                    "title": title,
+                    "description": description,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                },
+            },
         )
-        response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+        set_csrf_cookie(response, csrf_token)
+        return response
+    except Exception:
+        logger.exception("Failed to create election")
+        csrf_token = await get_csrf_token(request)
+        response = templates.TemplateResponse(
+            request,
+            "admin_election_create.html",
+            {
+                "request": request,
+                "error": "An internal error occurred. Please try again.",
+                "csrf_token": csrf_token,
+                "values": {
+                    "title": title,
+                    "description": description,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                },
+            },
+        )
+        set_csrf_cookie(response, csrf_token)
         return response
 
-@app.get("/admin/elections/{id}", response_class=HTMLResponse)
-async def edit_election_page(request: Request, id: int, user = Depends(admin_guard)):
+
+@app.get("/admin/elections/{id}", response_class=HTMLResponse, tags=["Admin"])
+async def edit_election_page(request: Request, id: int, user=Depends(admin_guard)):
     election = get_election_by_id(id)
     if not election:
         return RedirectResponse(url="/admin/elections", status_code=302)
-
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "admin_election_edit.html",
-        {"request": request, "election": election, "csrf_token": csrf_token}
+        {"request": request, "election": election, "csrf_token": csrf_token},
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
-@app.post("/admin/elections/{id}/update")
-async def update_election(
+@app.post("/admin/elections/{id}/update", tags=["Admin"])
+async def update_election_route(
     request: Request,
     id: int,
     title: str | None = Form(None),
     description: str | None = Form(None),
     start_time: str | None = Form(None),
     end_time: str | None = Form(None),
-    user = Depends(admin_guard),
-    csrf_token = Depends(verify_csrf)
+    user=Depends(admin_guard),
+    csrf_token=Depends(verify_csrf),
 ):
     if not title or not start_time or not end_time:
         election = get_election_by_id(id)
@@ -880,34 +812,28 @@ async def update_election(
         response = templates.TemplateResponse(
             request,
             "admin_election_edit.html",
-            {"request": request, "error": "Title, start time, and end time are required.", "election": election, "csrf_token": csrf_token}
+            {
+                "request": request,
+                "error": "Title, start time, and end time are required.",
+                "election": election,
+                "csrf_token": csrf_token,
+            },
         )
-        response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+        set_csrf_cookie(response, csrf_token)
         return response
-
     try:
-        s_time = datetime.strptime(start_time, '%Y-%m-%dT%H:%M')
-        e_time = datetime.strptime(end_time, '%Y-%m-%dT%H:%M')
-
-
-        if e_time <= s_time:
-            election = get_election_by_id(id)
-            csrf_token = await get_csrf_token(request)
-            response = templates.TemplateResponse(
-                request,
-                "admin_election_edit.html",
-                {"request": request, "error": "End time must be after start time.", "election": election, "csrf_token": csrf_token}
-            )
-            response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
-            return response
-
-        status = compute_election_status(s_time, e_time)
-        with get_db_cursor() as cursor:
-            query = "UPDATE elections SET title = %s, description = %s, start_time = %s, end_time = %s, status = %s WHERE id = %s"
-            cursor.execute(query, (title, description, s_time, e_time, status, id))
-
+        update_election(id, title, description, start_time, end_time)
         return RedirectResponse(url="/admin/elections?success=updated", status_code=303)
-
+    except ValidationError as e:
+        election = get_election_by_id(id)
+        csrf_token = await get_csrf_token(request)
+        response = templates.TemplateResponse(
+            request,
+            "admin_election_edit.html",
+            {"request": request, "error": str(e), "election": election, "csrf_token": csrf_token},
+        )
+        set_csrf_cookie(response, csrf_token)
+        return response
     except Exception:
         logger.exception("Failed to update election")
         election = get_election_by_id(id)
@@ -915,75 +841,49 @@ async def update_election(
         response = templates.TemplateResponse(
             request,
             "admin_election_edit.html",
-            {"request": request, "error": "An internal error occurred. Please try again.", "election": election, "csrf_token": csrf_token}
+            {
+                "request": request,
+                "error": "An internal error occurred. Please try again.",
+                "election": election,
+                "csrf_token": csrf_token,
+            },
         )
-        response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+        set_csrf_cookie(response, csrf_token)
         return response
 
-@app.post("/admin/elections/{id}/delete")
-async def delete_election(request: Request, id: int, user = Depends(admin_guard), csrf_token = Depends(verify_csrf)):
+
+@app.post("/admin/elections/{id}/delete", tags=["Admin"])
+async def delete_election_route(
+    request: Request,
+    id: int,
+    user=Depends(admin_guard),
+    csrf_token=Depends(verify_csrf),
+):
     try:
-        with get_db_cursor() as cursor:
-            cursor.execute("DELETE FROM elections WHERE id = %s", (id,))
+        delete_election(id)
         return RedirectResponse(url="/admin/elections?success=deleted", status_code=303)
     except Exception:
         logger.exception("Failed to delete election")
         return RedirectResponse(url="/admin/elections?error=internal", status_code=303)
 
 
-@app.get("/admin/candidates", response_class=HTMLResponse)
+@app.get("/admin/candidates", response_class=HTMLResponse, tags=["Admin"])
 async def admin_candidates_list(
     request: Request,
     status: str = "PENDING",
     sort: str = "date",
     order: str = "ASC",
     category: str | None = None,
-    user = Depends(admin_guard)
+    user=Depends(admin_guard),
 ):
-    status = status.upper()
-    if status not in ["PENDING", "APPROVED", "REJECTED"]:
-        status = "PENDING"
-
-    order = order.upper()
-    if order not in ["ASC", "DESC"]:
-        order = "ASC"
-
-    sort_mapping = {
-        "date": "ca.applied_at",
-        "name": "u.full_name",
-        "election": "e.title"
-    }
-    sort_field = sort_mapping.get(sort, "ca.applied_at")
-
     try:
-        with get_db_cursor() as cursor:
-            # Fetch all departments for the filter dropdown
-            cursor.execute("SELECT DISTINCT department FROM users WHERE department IS NOT NULL")
-            departments = [row['department'] for row in cursor.fetchall()]
-
-            query = """
-            SELECT ca.*, u.full_name as applicant_name, u.department, e.title as election_title
-            FROM candidate_applications ca
-            JOIN users u ON ca.user_id = u.user_id
-            JOIN elections e ON ca.election_id = e.id
-            WHERE ca.approval_status = %s
-            """
-            params = [status]
-
-            if category:
-                query += " AND u.department = %s"
-                params.append(category)
-
-            query += f" ORDER BY {sort_field} {order}"
-
-            cursor.execute(query, tuple(params))
-            applications = cursor.fetchall()
-            for app in applications:
-                app['applied_at'] = format_datetime_simple(app['applied_at'])
+        departments = get_distinct_departments()
+        applications = get_applications_by_status(status, sort, order, category)
     except Exception:
         logger.exception(f"Failed to fetch {status} candidates")
-        return RedirectResponse(url=f"/admin/candidates?status={status}&error=internal", status_code=303)
-
+        return RedirectResponse(
+            url=f"/admin/candidates?status={status}&error=internal", status_code=303
+        )
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
@@ -993,125 +893,94 @@ async def admin_candidates_list(
             "applications": applications,
             "user": user,
             "csrf_token": csrf_token,
-            "current_status": status,
+            "current_status": status.upper(),
             "departments": departments,
             "current_category": category,
             "current_sort": sort,
-            "current_order": order
-        }
+            "current_order": order,
+        },
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
-@app.get("/admin/candidates/pending", response_class=HTMLResponse)
+
+@app.get("/admin/candidates/pending", response_class=HTMLResponse, tags=["Admin"])
 async def admin_candidates_pending_redirect():
     return RedirectResponse(url="/admin/candidates?status=PENDING", status_code=302)
 
 
-@app.get("/admin/candidates/approved", response_class=HTMLResponse)
-async def admin_candidates_approved(request: Request, user = Depends(admin_guard)):
+@app.get("/admin/candidates/approved", response_class=HTMLResponse, tags=["Admin"])
+async def admin_candidates_approved(request: Request, user=Depends(admin_guard)):
     try:
-        with get_db_cursor() as cursor:
-            query = """
-            SELECT ca.*, u.full_name as applicant_name, u.department, e.title as election_title
-            FROM candidate_applications ca
-            JOIN users u ON ca.user_id = u.user_id
-            JOIN elections e ON ca.election_id = e.id
-            WHERE ca.approval_status = 'APPROVED'
-            ORDER BY ca.applied_at DESC
-            """
-            cursor.execute(query)
-            applications = cursor.fetchall()
-            for app in applications:
-                app['applied_at'] = format_datetime_simple(app['applied_at'])
+        applications = get_applications_by_status("APPROVED")
     except Exception:
         logger.exception("Failed to fetch approved candidates")
         return RedirectResponse(url="/admin/dashboard?error=internal", status_code=303)
-
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "admin_candidates_approved.html",
-        {
-            "request": request,
-            "applications": applications,
-            "user": user,
-            "csrf_token": csrf_token
-        }
+        {"request": request, "applications": applications, "user": user, "csrf_token": csrf_token},
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
-
-
-@app.post("/admin/candidates/{id}/{action}")
-async def update_candidate_status(
+@app.post("/admin/candidates/{id}/{action}", tags=["Admin"])
+async def update_candidate_status_route(
     request: Request,
     id: int,
     action: str,
-    user = Depends(admin_guard),
-    csrf_token = Depends(verify_csrf)
+    user=Depends(admin_guard),
+    csrf_token=Depends(verify_csrf),
 ):
-    if action not in ["approve", "reject"]:
-        return RedirectResponse(url="/admin/candidates/pending?error=invalid_action", status_code=303)
-
-    status = "APPROVED" if action == "approve" else "REJECTED"
-
     try:
-        with get_db_cursor() as cursor:
-            query = "UPDATE candidate_applications SET approval_status = %s, reviewed_by = %s WHERE id = %s"
-            cursor.execute(query, (status, user['user_id'], id))
+        update_candidate_status(id, action, user["user_id"])
         return RedirectResponse(url="/admin/candidates", status_code=303)
+    except ValidationError:
+        return RedirectResponse(
+            url="/admin/candidates/pending?error=invalid_action", status_code=303
+        )
     except Exception:
         logger.exception(f"Failed to {action} candidate")
         return RedirectResponse(url="/admin/candidates?error=internal", status_code=303)
 
 
-@app.get("/admin/elections/{id}/candidates", response_class=HTMLResponse)
-async def admin_election_candidates(request: Request, id: int, user = Depends(admin_guard)):
+@app.get("/admin/elections/{id}/candidates", response_class=HTMLResponse, tags=["Admin"])
+async def admin_election_candidates(request: Request, id: int, user=Depends(admin_guard)):
     election = get_election_by_id(id)
     if not election:
         return RedirectResponse(url="/admin/elections", status_code=302)
-
     try:
-        with get_db_cursor() as cursor:
-            query = """
-            SELECT ca.*, u.full_name as applicant_name
-            FROM candidate_applications ca
-            JOIN users u ON ca.user_id = u.user_id
-            WHERE ca.election_id = %s
-            """
-            cursor.execute(query, (id,))
-            applications = cursor.fetchall()
-            for app in applications:
-                app['applied_at'] = format_datetime_simple(app['applied_at'])
+        applications = get_election_candidates(id)
     except Exception:
         logger.exception("Failed to fetch candidates for election")
-        return RedirectResponse(url=f"/admin/elections/{id}/candidates?error=internal", status_code=303)
-
+        return RedirectResponse(
+            url=f"/admin/elections/{id}/candidates?error=internal", status_code=303
+        )
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "admin_election_candidates.html",
-        {"request": request, "applications": applications, "user": user, "election": election, "csrf_token": csrf_token}
+        {
+            "request": request,
+            "applications": applications,
+            "user": user,
+            "election": election,
+            "csrf_token": csrf_token,
+        },
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
-# ---------------------------------------------------------------------------
-# Election Results (admin + student)
-# ---------------------------------------------------------------------------
-
-@app.get("/admin/elections/{id}/results", response_class=HTMLResponse)
-async def admin_election_results(request: Request, id: int, user = Depends(admin_guard)):
+@app.get("/admin/elections/{id}/results", response_class=HTMLResponse, tags=["Admin"])
+async def admin_election_results(request: Request, id: int, user=Depends(admin_guard)):
     election = get_election_by_id(id)
     if not election:
         return RedirectResponse(url="/admin/elections", status_code=302)
     if election["status"] != "ENDED":
         return RedirectResponse(url=f"/admin/elections/{id}", status_code=302)
-
     results, total_votes = get_election_results(id)
     published = bool(election["result_published"])
     info_message = None
@@ -1119,7 +988,6 @@ async def admin_election_results(request: Request, id: int, user = Depends(admin
         info_message = "Results have been published to students."
     elif request.query_params.get("success") == "published":
         info_message = "Results have been published to students."
-
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
@@ -1135,83 +1003,40 @@ async def admin_election_results(request: Request, id: int, user = Depends(admin
             "csrf_token": csrf_token,
         },
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
-@app.post("/admin/elections/{id}/publish-results")
-async def publish_election_results(
+@app.post("/admin/elections/{id}/publish-results", tags=["Admin"])
+async def publish_election_results_route(
     request: Request,
     id: int,
-    user = Depends(admin_guard),
-    csrf_token = Depends(verify_csrf),
+    user=Depends(admin_guard),
+    csrf_token=Depends(verify_csrf),
 ):
-    election = get_election_by_id(id)
-    if not election:
-        return RedirectResponse(url="/admin/elections", status_code=303)
-    if election["status"] != "ENDED":
-        return RedirectResponse(url=f"/admin/elections/{id}", status_code=303)
-    if not election["result_published"]:
-        with get_db_cursor() as cursor:
-            cursor.execute(
-                "UPDATE elections SET result_published = 1 WHERE id = %s",
-                (id,),
-            )
-    return RedirectResponse(url=f"/admin/elections/{id}/results?success=published", status_code=303)
-
-
-@app.get("/student/elections/{id}/results", response_class=HTMLResponse)
-async def student_election_results(request: Request, id: int, user = Depends(student_guard)):
-    election = get_election_by_id(id)
-    if not election:
-        raise HTTPException(status_code=404, detail="Election not found")
-    if election["status"] != "ENDED" or not election["result_published"]:
-        return RedirectResponse(url=f"/student/elections/{id}?info=not_published", status_code=302)
-
-    results, total_votes = get_election_results(id)
-    return templates.TemplateResponse(
-        request,
-        "student_election_results.html",
-        {
-            "request": request,
-            "user": user,
-            "election": election,
-            "results": results,
-            "total_votes": total_votes,
-        },
-    )
-
-
-@app.get("/admin/results", response_class=HTMLResponse)
-async def admin_results_overview(request: Request, user = Depends(admin_guard)):
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT id, title, description, start_time, end_time, status, result_published
-            FROM elections
-            WHERE end_time <= NOW()
-            ORDER BY end_time DESC
-            """
+    try:
+        publish_results(id)
+        return RedirectResponse(
+            url=f"/admin/elections/{id}/results?success=published", status_code=303
         )
-        elections = cursor.fetchall()
-        for e in elections:
-            e['start_time'] = ensure_datetime(e['start_time'])
-            e['end_time'] = ensure_datetime(e['end_time'])
-            e['status'] = compute_election_status(e['start_time'], e['end_time'])
+    except (NotFoundError, ElectionError):
+        return RedirectResponse(url="/admin/elections", status_code=303)
+    except Exception:
+        logger.exception("Failed to publish results")
+        return RedirectResponse(
+            url=f"/admin/elections/{id}/results?error=internal", status_code=303
+        )
 
-    election_results = []
-    for election in elections:
-        results, total_votes = get_election_results(election['id'])
-        election_results.append({
-            "election": election,
-            "results": results,
-            "total_votes": total_votes,
-        })
 
+@app.get("/admin/results", response_class=HTMLResponse, tags=["Admin"])
+async def admin_results_overview(request: Request, user=Depends(admin_guard)):
+    try:
+        election_results = get_elections_with_results()
+    except Exception:
+        election_results = []
     info_message = None
     if request.query_params.get("success") == "published":
         info_message = "Results have been published to students."
-
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
@@ -1224,301 +1049,92 @@ async def admin_results_overview(request: Request, user = Depends(admin_guard)):
             "csrf_token": csrf_token,
         },
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
-@app.get("/student/results", response_class=HTMLResponse)
-async def student_results_overview(request: Request, user = Depends(student_guard)):
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT id, title, description, start_time, end_time, status, result_published
-            FROM elections
-            WHERE end_time <= NOW() AND result_published = 1
-            ORDER BY end_time DESC
-            """
-        )
-        elections = cursor.fetchall()
-        for e in elections:
-            e['start_time'] = ensure_datetime(e['start_time'])
-            e['end_time'] = ensure_datetime(e['end_time'])
-            e['status'] = compute_election_status(e['start_time'], e['end_time'])
-
-    election_results = []
-    for election in elections:
-        results, total_votes = get_election_results(election['id'])
-        election_results.append({
-            "election": election,
-            "results": results,
-            "total_votes": total_votes,
-        })
-
-    return templates.TemplateResponse(
-        request,
-        "student_results.html",
-        {
-            "request": request,
-            "user": user,
-            "election_results": election_results,
-        },
-    )
-
-
-def save_verification_file(user_id: int, election_id: int, v_type: str, file: UploadFile) -> str | None:
-    allowed_extensions = {'.jpg', '.jpeg', '.png'}
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in allowed_extensions:
-        return None
-
-    folder = "selfies" if v_type == "SELFIE" else "signatures"
-    filename = f"verify_{election_id}_{user_id}_{uuid.uuid4().hex[:8]}{ext}"
-    file_path = os.path.join("uploads", folder, filename)
-
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        return f"/uploads/{folder}/{filename}"
-    except Exception as e:
-        logger.error(f"Error saving verification file for user {user_id}: {e}")
-        return None
-
-def save_profile_picture(user_id: int, file: UploadFile) -> str | None:
-    allowed_extensions = {'.jpg', '.jpeg', '.png'}
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in allowed_extensions:
-        return None
-
-    filename = f"profile_{user_id}_{uuid.uuid4().hex[:8]}{ext}"
-    file_path = os.path.join("uploads", "profiles", filename)
-
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        return f"/uploads/profiles/{filename}"
-    except Exception as e:
-        logger.error(f"Error saving profile picture for user {user_id}: {e}")
-        return None
-
-@app.get("/student/elections/{id}/verify", response_class=HTMLResponse)
-async def student_election_verify_page(request: Request, id: int, user = Depends(student_guard)):
-    election = get_election_by_id(id)
-    if not election:
-        return RedirectResponse(url="/student/elections", status_code=302)
-
-    if election["status"] != "ACTIVE":
-        return RedirectResponse(url=f"/student/elections/{id}?error=inactive", status_code=302)
-
-    if has_user_voted(user["user_id"], id):
-        return RedirectResponse(url=f"/student/elections/{id}?success=already_voted", status_code=302)
-
-    # Ensure session is active and candidate is selected
-    with get_db_cursor() as cursor:
-        cursor.execute(
-            "SELECT candidate_application_id, expires_at FROM voting_sessions WHERE student_id = %s AND election_id = %s AND completed = 0",
-            (user["user_id"], id)
-        )
-        session = cursor.fetchone()
-
-    if not session or not session['candidate_application_id']:
-        return RedirectResponse(url=f"/student/elections/{id}/vote?error=internal", status_code=302)
-
-    expires_at = ensure_datetime(session['expires_at'])
-    if expires_at and expires_at < datetime.now(UTC):
-        return RedirectResponse(url=f"/student/elections/{id}/vote?error=session_expired", status_code=302)
-
-    error_key = request.query_params.get("error")
-    error_message = None
-    if error_key == "invalid_file":
-        error_message = "Invalid file format. Please upload a JPG, JPEG, or PNG image."
-    elif error_key == "session_expired":
-        error_message = "Your voting session has expired. Please select your candidate again."
-    elif error_key == "internal":
-        error_message = "An internal error occurred during verification. Please try again."
-
-    csrf_token = await get_csrf_token(request)
-    response = templates.TemplateResponse(
-        request,
-        "student_election_verify.html",
-        {
-            "request": request,
-            "election": election,
-            "user": user,
-            "csrf_token": csrf_token,
-            "error_message": error_message
-        }
-    )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
-    return response
-
-@app.post("/student/elections/{id}/verify")
-async def submit_student_verification(
-    request: Request,
-    id: int,
-    verification_type: str = Form(...),
-    verification_file: UploadFile = File(...),
-    user = Depends(student_guard),
-    csrf_token = Depends(verify_csrf)
-):
-    election = get_election_by_id(id)
-    if not election:
-        return RedirectResponse(url="/student/elections", status_code=302)
-
-    if verification_type not in ["SELFIE", "SIGNATURE"]:
-        return RedirectResponse(url=f"/student/elections/{id}/verify?error=internal", status_code=303)
-
-    file_path = save_verification_file(user["user_id"], id, verification_type, verification_file)
-    if not file_path:
-        return RedirectResponse(url=f"/student/elections/{id}/verify?error=invalid_file", status_code=303)
-
-    try:
-        with get_db_cursor() as cursor:
-            # 1. Validate session and check expiration
-            cursor.execute(
-                "SELECT candidate_application_id, expires_at FROM voting_sessions WHERE student_id = %s AND election_id = %s AND completed = 0",
-                (user["user_id"], id)
-            )
-            session = cursor.fetchone()
-
-            if not session or not session['candidate_application_id']:
-                return RedirectResponse(url=f"/student/elections/{id}/verify?error=internal", status_code=303)
-
-            expires_at = ensure_datetime(session['expires_at'])
-            if expires_at and expires_at < datetime.now(UTC):
-                return RedirectResponse(url=f"/student/elections/{id}/vote?error=session_expired", status_code=303)
-
-            candidate_application_id = session['candidate_application_id']
-
-            # 2. Insert into votes table
-            cursor.execute(
-                "INSERT INTO votes (voter_id, election_id, candidate_id, voted_at) VALUES (%s, %s, %s, %s)",
-                (user["user_id"], id, candidate_application_id, datetime.now(UTC))
-            )
-
-            # 3. Insert into vote_verifications table
-            cursor.execute(
-                "INSERT INTO vote_verifications (student_id, election_id, verification_type, file_path, uploaded_at) VALUES (%s, %s, %s, %s, %s)",
-                (user["user_id"], id, verification_type, file_path, datetime.now(UTC))
-            )
-
-            # 4. Mark session completed
-            cursor.execute(
-                "UPDATE voting_sessions SET completed = 1 WHERE student_id = %s AND election_id = %s",
-                (user["user_id"], id)
-            )
-
-    except Exception:
-        logger.exception("Verification transaction failed")
-        return RedirectResponse(url=f"/student/elections/{id}/verify?error=internal", status_code=303)
-
-    return RedirectResponse(url=f"/student/elections/{id}?success=voted", status_code=303)
-
-@app.get("/profile", response_class=HTMLResponse)
-async def profile_page(request: Request, user = Depends(get_current_user)):
+# ---------------------------------------------------------------------------
+# Profile Routes
+# ---------------------------------------------------------------------------
+@app.get("/profile", response_class=HTMLResponse, tags=["Profile"])
+async def profile_page(request: Request, user=Depends(get_current_user)):
     if not user:
         return RedirectResponse(url="/login", status_code=302)
-
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT full_name, email, department, academic_year, profile_picture FROM users WHERE user_id = %s", (user['user_id'],))
-        user_data = cursor.fetchone()
-
-    if not user_data:
+    try:
+        user_data = get_user_by_id(user["user_id"])
+    except NotFoundError:
         return RedirectResponse(url="/login", status_code=302)
-
-    with get_db_cursor() as cursor:
-        cursor.execute("""
-            SELECT ca.id, ca.election_id, ca.approval_status, ca.applied_at, e.title as election_title
-            FROM candidate_applications ca
-            JOIN elections e ON ca.election_id = e.id
-            WHERE ca.user_id = %s
-            ORDER BY ca.applied_at DESC
-        """, (user['user_id'],))
-        applications = cursor.fetchall()
-        for app in applications:
-            app['applied_at'] = format_datetime_simple(app['applied_at'])
-
+    applications = get_user_candidate_applications(user["user_id"])
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "profile.html",
-        {"request": request, "user": user_data, "csrf_token": csrf_token, "applications": applications}
+        {
+            "request": request,
+            "user": user_data,
+            "csrf_token": csrf_token,
+            "applications": applications,
+        },
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
-@app.post("/profile/update")
-async def update_profile(
+
+@app.post("/profile/update", tags=["Profile"])
+async def update_profile_route(
     request: Request,
     full_name: str = Form(...),
     department: str = Form(...),
     academic_year: str = Form(...),
     profile_pic: UploadFile | None = File(None),
-    user = Depends(get_current_user),
-    csrf_token = Depends(verify_csrf)
+    user=Depends(get_current_user),
+    csrf_token=Depends(verify_csrf),
 ):
     if not user:
         return RedirectResponse(url="/login", status_code=302)
-
     try:
         profile_path = None
-        if profile_pic:
-            profile_path = save_profile_picture(user['user_id'], profile_pic)
-
-        with get_db_cursor() as cursor:
-            if profile_path:
-                query = "UPDATE users SET full_name = %s, department = %s, academic_year = %s, profile_picture = %s WHERE user_id = %s"
-                cursor.execute(query, (full_name, department, academic_year, profile_path, user['user_id']))
-            else:
-                query = "UPDATE users SET full_name = %s, department = %s, academic_year = %s WHERE user_id = %s"
-                cursor.execute(query, (full_name, department, academic_year, user['user_id']))
-
+        if profile_pic and profile_pic.filename:
+            profile_path = validate_and_save_profile_picture(user["user_id"], profile_pic)
+        update_user_profile(user["user_id"], full_name, department, academic_year, profile_path)
         return RedirectResponse(url="/profile?success=updated", status_code=303)
     except Exception:
         logger.exception("Failed to update user profile")
         return RedirectResponse(url="/profile?error=internal", status_code=303)
 
-@app.get("/admin/users/{id}/profile", response_class=HTMLResponse)
-async def admin_user_profile_page(request: Request, id: int, user = Depends(admin_guard)):
-    with get_db_cursor() as cursor:
-        cursor.execute("SELECT user_id, full_name, email, department, academic_year, profile_picture, role FROM users WHERE user_id = %s", (id,))
-        target_user = cursor.fetchone()
 
-    if not target_user:
+@app.get("/admin/users/{id}/profile", response_class=HTMLResponse, tags=["Admin"])
+async def admin_user_profile_page(request: Request, id: int, user=Depends(admin_guard)):
+    try:
+        target_user = get_user_by_id(id)
+    except NotFoundError:
         raise HTTPException(status_code=404, detail="User not found")
-
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "admin_user_profile.html",
-        {"request": request, "target_user": target_user, "csrf_token": csrf_token}
+        {"request": request, "target_user": target_user, "csrf_token": csrf_token},
     )
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    set_csrf_cookie(response, csrf_token)
     return response
 
-@app.post("/admin/users/{id}/update")
-async def admin_update_user_profile(
+
+@app.post("/admin/users/{id}/update", tags=["Admin"])
+async def admin_update_user_profile_route(
     request: Request,
     id: int,
     full_name: str = Form(...),
     department: str = Form(...),
     academic_year: str = Form(...),
     profile_pic: UploadFile | None = File(None),
-    user = Depends(admin_guard),
-    csrf_token = Depends(verify_csrf)
+    user=Depends(admin_guard),
+    csrf_token=Depends(verify_csrf),
 ):
     try:
         profile_path = None
-        if profile_pic:
-            profile_path = save_profile_picture(id, profile_pic)
-
-        with get_db_cursor() as cursor:
-            if profile_path:
-                query = "UPDATE users SET full_name = %s, department = %s, academic_year = %s, profile_picture = %s WHERE user_id = %s"
-                cursor.execute(query, (full_name, department, academic_year, profile_path, id))
-            else:
-                query = "UPDATE users SET full_name = %s, department = %s, academic_year = %s WHERE user_id = %s"
-                cursor.execute(query, (full_name, department, academic_year, id))
-
+        if profile_pic and profile_pic.filename:
+            profile_path = validate_and_save_profile_picture(id, profile_pic)
+        update_user_profile(id, full_name, department, academic_year, profile_path)
         return RedirectResponse(url=f"/admin/users/{id}/profile?success=updated", status_code=303)
     except Exception:
         logger.exception("Admin failed to update user profile")

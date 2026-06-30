@@ -5,35 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Online Voting System{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+    {% block extra_head %}{% endblock %}
 </head>
 <body class="{% if request.state.user %}{{ request.state.user.role.lower() }}-auth {% endif %}">
-    <nav class="navbar">
-        <div class="nav-container">
-            <a href="/" class="nav-logo">Voting System</a>
-            <div class="nav-links">
-                {% if request.state.user %}
-                    <a href="{{ '/admin/dashboard' if request.state.user.role == 'ADMIN' else '/student/dashboard' }}">Dashboard</a>
-                    <a href="{{ '/admin/results' if request.state.user.role == 'ADMIN' else '/student/results' }}" class="nav-results-link">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-                        Results
-                    </a>
-                    <a href="/profile">Profile</a>
-                    <button id="nav-edit-profile-btn" class="nav-edit-btn hidden" onclick="toggleEditMode()">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 6H3"/><path d="M17 21l-4-4 4-4"/><path d="M3 18h18"/></svg>
-                        Edit Profile
-                    </button>
-                    <a href="/auth/logout" class="btn-logout">Logout</a>
-                {% else %}
-                    <a href="/login">Login</a>
-                    <a href="/register" class="btn-register">Register</a>
-                {% endif %}
-            </div>
-        </div>
-    </nav>
-    <div id="toast-notification" class="toast hidden"></div>
-    <div class="container">
+    <a href="#main-content" class="skip-link" style="position:absolute;left:-9999px;top:0;z-index:9999;padding:0.5rem 1rem;background:#0f172a;color:white;text-decoration:none;">Skip to main content</a>
+    {% include 'partials/navbar.html' %}
+    <div id="toast-notification" class="toast hidden" role="status" aria-live="polite"></div>
+    <main id="main-content" class="container" role="main">
         {% block content %}{% endblock %}
-    </div>
+    </main>
     <script src="{{ url_for('static', path='/js/main.js') }}"></script>
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>
