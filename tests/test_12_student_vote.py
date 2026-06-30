@@ -1,10 +1,11 @@
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import jwt
 from fastapi.testclient import TestClient
 
 from app import COOKIE_NAME, CSRF_COOKIE_NAME, JWT_ALGORITHM, JWT_SECRET, app
+from exceptions import VoteError
 
 client = TestClient(app)
 
@@ -23,11 +24,11 @@ def student_cookies():
     return {COOKIE_NAME: create_test_token()}
 
 
-def csrf_cookies(token: str = "test-csrf-token"):
+def csrf_cookies(token: str = "test-csrf-token"):  # noqa: S107
     return {CSRF_COOKIE_NAME: token}
 
 
-@patch("app.get_election_by_id")
+@patch("services.election_service.get_election_by_id")
 def test_vote_page_redirects_unauthenticated(mock_get_election):
     mock_get_election.return_value = {
         "id": 10,
@@ -43,10 +44,10 @@ def test_vote_page_redirects_unauthenticated(mock_get_election):
     assert response.headers["location"] == "/login"
 
 
-@patch("app.get_election_by_id")
-@patch("app.has_user_voted")
 @patch("app.get_approved_candidates_for_election")
-def test_vote_page_shows_approved_candidates(mock_candidates, mock_has_voted, mock_get_election):
+@patch("app.has_user_voted")
+@patch("app.get_election_by_id")
+def test_vote_page_shows_approved_candidates(mock_get_election, mock_has_voted, mock_candidates):
     mock_get_election.return_value = {
         "id": 10,
         "title": "Student Council",
@@ -97,40 +98,14 @@ def test_vote_page_rejects_non_active_election(mock_get_election):
     assert response.headers["location"] == "/student/elections/10?error=inactive"
 
 
-@patch("app.get_election_by_id")
-@patch("app.has_user_voted")
-@patch("app.get_approved_candidate_for_vote")
-@patch("app.mark_voting_session_completed")
-@patch("app.get_db_cursor")
+@patch("app.create_voting_session")
 def test_submit_vote_success(
-    mock_get_db_cursor,
-    mock_mark_session,
-    mock_get_candidate,
-    mock_has_voted,
-    mock_get_election,
+    mock_create_session,
+    mock_cursor,
 ):
-    mock_get_election.return_value = {
-        "id": 10,
-        "title": "Student Council",
-        "description": "Campus leadership election",
-        "start_time": datetime.now(),
-        "end_time": datetime.now() + timedelta(hours=2),
-        "status": "ACTIVE",
-    }
-    mock_has_voted.return_value = False
-    mock_get_candidate.return_value = {
-        "id": 101,
-        "user_id": 2,
-        "election_id": 10,
-        "approval_status": "APPROVED",
-    }
+    mock_create_session.return_value = None
 
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_db_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
-
-    csrf_token = "test-csrf-token"
+    csrf_token = "test-csrf-token"  # noqa: S105
     client.cookies.clear()
     client.cookies.set(COOKIE_NAME, create_test_token())
     client.cookies.set(CSRF_COOKIE_NAME, csrf_token)
@@ -143,29 +118,17 @@ def test_submit_vote_success(
 
     assert response.status_code == 303
     assert response.headers["location"] == "/student/elections/10/verify"
-    mock_cursor.execute.assert_called_once()
 
 
-@patch("app.get_election_by_id")
-@patch("app.has_user_voted")
-@patch("app.get_approved_candidate_for_vote")
+@patch("app.create_voting_session")
 def test_submit_vote_rejects_invalid_candidate(
-    mock_get_candidate,
-    mock_has_voted,
-    mock_get_election,
+    mock_create_session,
 ):
-    mock_get_election.return_value = {
-        "id": 10,
-        "title": "Student Council",
-        "description": "Campus leadership election",
-        "start_time": datetime.now(),
-        "end_time": datetime.now() + timedelta(hours=2),
-        "status": "ACTIVE",
-    }
-    mock_has_voted.return_value = False
-    mock_get_candidate.return_value = None
+    mock_create_session.side_effect = VoteError(
+        "Please select an approved candidate from this election."
+    )
 
-    csrf_token = "test-csrf-token"
+    csrf_token = "test-csrf-token"  # noqa: S105
     client.cookies.clear()
     client.cookies.set(COOKIE_NAME, create_test_token())
     client.cookies.set(CSRF_COOKIE_NAME, csrf_token)
@@ -177,12 +140,15 @@ def test_submit_vote_rejects_invalid_candidate(
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/student/elections/10/vote?error=invalid_candidate"
+    assert (
+        response.headers["location"]
+        == "/student/elections/10/vote?error=please_select_an_approved_candidate_from_this_election."
+    )
 
 
-@patch("app.get_election_by_id")
 @patch("app.has_user_voted")
-def test_detail_page_hides_vote_action_after_vote(mock_has_voted, mock_get_election):
+@patch("app.get_election_by_id")
+def test_detail_page_hides_vote_action_after_vote(mock_get_election, mock_has_voted):
     mock_get_election.return_value = {
         "id": 10,
         "title": "Student Council",

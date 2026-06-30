@@ -1,5 +1,4 @@
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
 
 import jwt
 import pytest
@@ -13,46 +12,30 @@ def client():
     with TestClient(app) as c:
         yield c
 
-@pytest.fixture
-def mock_cursor():
-    with patch("app.get_db_cursor") as mock_get_cursor:
-        mock_cm = MagicMock()
-        mock_cursor_obj = MagicMock()
-        mock_get_cursor.return_value = mock_cm
-        mock_cm.__enter__.return_value = mock_cursor_obj
-        yield mock_cursor_obj
 
 @pytest.fixture
 def student_user():
-    return {
-        "id": 1,
-        "email": "student@example.com",
-        "role": "STUDENT"
-    }
+    return {"id": 1, "email": "student@example.com", "role": "STUDENT"}
+
 
 @pytest.fixture
 def admin_user():
-    return {
-        "id": 2,
-        "email": "admin@example.com",
-        "role": "ADMIN"
-    }
+    return {"id": 2, "email": "admin@example.com", "role": "ADMIN"}
+
 
 def create_test_token(user_data):
-    payload = {
-        "user_id": user_data["id"],
-        "role": user_data["role"],
-        "email": user_data["email"]
-    }
+    payload = {"user_id": user_data["id"], "role": user_data["role"], "email": user_data["email"]}
     expire = datetime.now(UTC) + timedelta(hours=24)
     payload.update({"exp": expire})
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
 
 def test_student_elections_unauthenticated(client):
     """Test that accessing /student/elections without authentication redirects to /login."""
     response = client.get("/student/elections", follow_redirects=False)
     assert response.status_code == 302
     assert response.headers["location"] == "/login"
+
 
 def test_student_elections_authenticated_success(client, mock_cursor, student_user):
     """Test that an authenticated student can view the list of elections."""
@@ -67,7 +50,8 @@ def test_student_elections_authenticated_success(client, mock_cursor, student_us
             "description": "Main council election",
             "start_time": datetime(2026, 6, 1, 10, 0),
             "end_time": datetime(2026, 6, 1, 18, 0),
-            "status": "UPCOMING"
+            "status": "UPCOMING",
+            "result_published": 0,
         },
         {
             "id": 102,
@@ -75,7 +59,8 @@ def test_student_elections_authenticated_success(client, mock_cursor, student_us
             "description": "Rep for Computer Science",
             "start_time": datetime(2026, 5, 1, 10, 0),
             "end_time": datetime(2026, 5, 1, 18, 0),
-            "status": "ACTIVE"
+            "status": "ACTIVE",
+            "result_published": 0,
         },
         {
             "id": 103,
@@ -83,7 +68,8 @@ def test_student_elections_authenticated_success(client, mock_cursor, student_us
             "description": "Annual club election",
             "start_time": datetime(2026, 4, 1, 10, 0),
             "end_time": datetime(2026, 4, 1, 18, 0),
-            "status": "ENDED"
+            "status": "ENDED",
+            "result_published": 0,
         },
     ]
     mock_cursor.fetchall.return_value = mock_elections
@@ -104,6 +90,7 @@ def test_student_elections_authenticated_success(client, mock_cursor, student_us
     assert "/student/elections/102" in response.text
     assert "/student/elections/103" in response.text
 
+
 def test_student_elections_empty_list(client, mock_cursor, student_user):
     """Test the student elections page when no elections exist."""
     token = create_test_token(student_user)
@@ -116,6 +103,7 @@ def test_student_elections_empty_list(client, mock_cursor, student_user):
     # The template should handle empty lists gracefully.
     # Since we don't have the template, we just verify it loads.
 
+
 def test_student_elections_admin_access_forbidden(client, admin_user):
     """Test that an admin user is redirected if they try to access the student elections list."""
     token = create_test_token(admin_user)
@@ -125,6 +113,7 @@ def test_student_elections_admin_access_forbidden(client, admin_user):
     # student_guard redirects non-STUDENTs to /login
     assert response.status_code == 302
     assert response.headers["location"] == "/login"
+
 
 def test_student_access_admin_route_forbidden(client, student_user):
     """Test that a student user cannot access admin routes."""

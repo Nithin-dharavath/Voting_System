@@ -1,0 +1,9 @@
+{% if success_message %}
+<div class="alert alert-success" role="alert" aria-live="polite">{{ success_message }}</div>
+{% endif %}
+{% if error_message %}
+<div class="alert alert-error" role="alert" aria-live="assertive">{{ error_message }}</div>
+{% endif %}
+{% if info_message %}
+<div class="alert alert-info" role="alert" aria-live="polite">{{ info_message }}</div>
+{% endif %}

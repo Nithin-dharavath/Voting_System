@@ -1,11 +1,29 @@
-<aside class="admin-sidebar">
+<button class="admin-sidebar-toggle" onclick="toggleAdminSidebar()" aria-label="Toggle sidebar navigation">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    Menu
+</button>
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleAdminSidebar()"></div>
+<aside class="admin-sidebar" id="admin-sidebar" role="navigation" aria-label="Admin navigation">
     <h3>Management</h3>
-    <ul class="sidebar-nav">
-        <li><a href="/admin/dashboard">Dashboard</a></li>
-        <li><a href="/admin/elections" class="{{ 'active' if request.url.path == '/admin/elections' else '' }}">Elections</a></li>
-        <li><a href="/admin/candidates">Candidates</a></li>
-        <li><a href="/admin/candidates/approved">Approved Candidates</a></li>
-        <li><a href="/admin/results" class="{{ 'active' if request.url.path == '/admin/results' else '' }}">Results</a></li>
-        <li><a href="/admin/audit">Audit Logs</a></li>
+    <ul class="sidebar-nav" role="menubar">
+        <li role="none"><a href="/admin/dashboard" role="menuitem">Dashboard</a></li>
+        <li role="none"><a href="/admin/elections" class="{{ 'active' if request.url.path == '/admin/elections' else '' }}" role="menuitem">Elections</a></li>
+        <li role="none"><a href="/admin/candidates" role="menuitem">Candidates</a></li>
+        <li role="none"><a href="/admin/candidates/approved" role="menuitem">Approved Candidates</a></li>
+        <li role="none"><a href="/admin/results" class="{{ 'active' if request.url.path == '/admin/results' else '' }}" role="menuitem">Results</a></li>
+        <li role="none"><a href="/admin/audit" role="menuitem">Audit Logs</a></li>
     </ul>
 </aside>
+
+<script>
+function toggleAdminSidebar() {
+    const sidebar = document.getElementById('admin-sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (sidebar) {
+        sidebar.classList.toggle('mobile-visible');
+    }
+    if (overlay) {
+        overlay.classList.toggle('visible');
+    }
+}
+</script>

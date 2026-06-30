@@ -42,3 +42,6 @@ build/
 # MySQL Dumps
 *.sql
 *.dump
+
+uploads/
+session-*.md

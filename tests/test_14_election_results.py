@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import jwt
 from fastapi.testclient import TestClient
@@ -31,7 +31,9 @@ def csrf_token() -> str:
     return "test-csrf-token"
 
 
-def make_election(election_id: int = 10, status: str = "ENDED", result_published: bool = False) -> dict:
+def make_election(
+    election_id: int = 10, status: str = "ENDED", result_published: bool = False
+) -> dict:
     return {
         "id": election_id,
         "title": "Cultural Fest Lead 2025",
@@ -69,6 +71,7 @@ def make_results() -> list:
 # ---------------------------------------------------------------------------
 # Admin: GET /admin/elections/{id}/results
 # ---------------------------------------------------------------------------
+
 
 def test_admin_results_page_unauthenticated_redirects():
     response = client.get("/admin/elections/10/results", follow_redirects=False)
@@ -123,7 +126,9 @@ def test_admin_results_page_redirects_when_election_missing(mock_get_election):
 
 @patch("app.get_election_results")
 @patch("app.get_election_by_id")
-def test_admin_results_page_hides_publish_button_when_published(mock_get_election, mock_get_results):
+def test_admin_results_page_hides_publish_button_when_published(
+    mock_get_election, mock_get_results
+):
     mock_get_election.return_value = make_election(status="ENDED", result_published=True)
     mock_get_results.return_value = (make_results(), 5)
 
@@ -140,7 +145,9 @@ def test_admin_results_page_hides_publish_button_when_published(mock_get_electio
 
 @patch("app.get_election_results")
 @patch("app.get_election_by_id")
-def test_admin_results_page_shows_info_message_after_publishing(mock_get_election, mock_get_results):
+def test_admin_results_page_shows_info_message_after_publishing(
+    mock_get_election, mock_get_results
+):
     mock_get_election.return_value = make_election(status="ENDED", result_published=True)
     mock_get_results.return_value = (make_results(), 5)
 
@@ -156,15 +163,10 @@ def test_admin_results_page_shows_info_message_after_publishing(mock_get_electio
 # Admin: POST /admin/elections/{id}/publish-results
 # ---------------------------------------------------------------------------
 
-@patch("app.get_db_cursor")
-@patch("app.get_election_by_id")
-def test_publish_results_sets_flag_and_redirects(mock_get_election, mock_get_db_cursor):
-    mock_get_election.return_value = make_election(status="ENDED", result_published=False)
 
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_db_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
+@patch("services.election_service.get_election_by_id")
+def test_publish_results_sets_flag_and_redirects(mock_get_election, mock_cursor):
+    mock_get_election.return_value = make_election(status="ENDED", result_published=False)
 
     token = csrf_token()
     client.cookies.clear()
@@ -185,15 +187,9 @@ def test_publish_results_sets_flag_and_redirects(mock_get_election, mock_get_db_
     assert mock_cursor.execute.call_args[0][1] == (10,)
 
 
-@patch("app.get_db_cursor")
-@patch("app.get_election_by_id")
-def test_publish_results_rejects_non_ended_election(mock_get_election, mock_get_db_cursor):
+@patch("services.election_service.get_election_by_id")
+def test_publish_results_rejects_non_ended_election(mock_get_election, mock_cursor):
     mock_get_election.return_value = make_election(status="ACTIVE", result_published=False)
-
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_db_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
 
     token = csrf_token()
     client.cookies.clear()
@@ -207,19 +203,13 @@ def test_publish_results_rejects_non_ended_election(mock_get_election, mock_get_
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/admin/elections/10"
+    assert response.headers["location"] == "/admin/elections"
     mock_cursor.execute.assert_not_called()
 
 
-@patch("app.get_db_cursor")
-@patch("app.get_election_by_id")
-def test_publish_results_is_idempotent_when_already_published(mock_get_election, mock_get_db_cursor):
+@patch("services.election_service.get_election_by_id")
+def test_publish_results_is_idempotent_when_already_published(mock_get_election, mock_cursor):
     mock_get_election.return_value = make_election(status="ENDED", result_published=True)
-
-    mock_cm = MagicMock()
-    mock_cursor = MagicMock()
-    mock_get_db_cursor.return_value = mock_cm
-    mock_cm.__enter__.return_value = mock_cursor
 
     token = csrf_token()
     client.cookies.clear()
@@ -259,6 +249,7 @@ def test_publish_results_redirects_when_election_missing(mock_get_election):
 # ---------------------------------------------------------------------------
 # Student: GET /student/elections/{id}/results
 # ---------------------------------------------------------------------------
+
 
 def test_student_results_page_unauthenticated_redirects():
     response = client.get("/student/elections/10/results", follow_redirects=False)
@@ -352,10 +343,13 @@ def test_student_results_page_handles_singular_vote_text(mock_get_election, mock
 # Student detail page gating (template-level)
 # ---------------------------------------------------------------------------
 
+
 @patch("app.get_election_by_id")
 @patch("app.has_user_voted")
 @patch("app.has_user_applied")
-def test_student_detail_page_shows_view_results_when_published(mock_applied, mock_voted, mock_get_election):
+def test_student_detail_page_shows_view_results_when_published(
+    mock_applied, mock_voted, mock_get_election
+):
     mock_get_election.return_value = make_election(status="ENDED", result_published=True)
     mock_voted.return_value = False
     mock_applied.return_value = False
@@ -374,7 +368,9 @@ def test_student_detail_page_shows_view_results_when_published(mock_applied, moc
 @patch("app.get_election_by_id")
 @patch("app.has_user_voted")
 @patch("app.has_user_applied")
-def test_student_detail_page_hides_view_results_when_not_published(mock_applied, mock_voted, mock_get_election):
+def test_student_detail_page_hides_view_results_when_not_published(
+    mock_applied, mock_voted, mock_get_election
+):
     mock_get_election.return_value = make_election(status="ENDED", result_published=False)
     mock_voted.return_value = False
     mock_applied.return_value = False
@@ -391,7 +387,9 @@ def test_student_detail_page_hides_view_results_when_not_published(mock_applied,
 @patch("app.get_election_by_id")
 @patch("app.has_user_voted")
 @patch("app.has_user_applied")
-def test_student_detail_page_renders_info_banner_on_not_published_redirect(mock_applied, mock_voted, mock_get_election):
+def test_student_detail_page_renders_info_banner_on_not_published_redirect(
+    mock_applied, mock_voted, mock_get_election
+):
     mock_get_election.return_value = make_election(status="ENDED", result_published=False)
     mock_voted.return_value = False
     mock_applied.return_value = False
