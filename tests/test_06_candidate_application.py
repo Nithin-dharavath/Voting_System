@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from app import COOKIE_NAME, app, create_access_token
 from database.connection import get_db_cursor
 
+pytestmark = pytest.mark.integration
+
 client = TestClient(app)
 
 
