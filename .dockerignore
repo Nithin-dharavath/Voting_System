@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.github/
+.env
+*.md
+docs/
+workflow/
+uploads/
+tests/
+.pre-commit-config.yaml
+.mypy_cache/
+.ruff_cache/

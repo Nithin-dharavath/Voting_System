@@ -1,0 +1,34 @@
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: testpassword
+      MYSQL_DATABASE: voting_system_test
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test:
+    build: .
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: voting_system_test
+      DB_USER: root
+      DB_PASSWORD: testpassword
+      JWT_SECRET: ci-test-secret-key
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      bash -c "
+        mysql -h db -u root -ptestpassword voting_system_test < /app/database/schema.sql &&
+        python database/seed.py &&
+        pytest -m integration --tb=short -v
+      "
+    volumes:
+      - ./database/schema.sql:/app/database/schema.sql:ro
