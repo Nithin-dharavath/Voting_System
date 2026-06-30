@@ -1,9 +1,13 @@
+from datetime import UTC
+from unittest.mock import MagicMock, patch
+
+import jwt
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
 from werkzeug.security import generate_password_hash
-from app import app, JWT_SECRET, JWT_ALGORITHM, COOKIE_NAME
-import jwt
+
+from app import COOKIE_NAME, JWT_ALGORITHM, JWT_SECRET, app
+
 
 @pytest.fixture
 def client():
@@ -43,8 +47,8 @@ def create_test_token(user_data):
         "role": user_data["role"],
         "email": user_data["email"]
     }
-    from datetime import datetime, timedelta, timezone
-    expire = datetime.now(timezone.utc) + timedelta(hours=24)
+    from datetime import datetime, timedelta
+    expire = datetime.now(UTC) + timedelta(hours=24)
     payload.update({"exp": expire})
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 

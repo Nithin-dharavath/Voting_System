@@ -1,7 +1,8 @@
-import pytest
-from fastapi.testclient import TestClient
 from unittest.mock import MagicMock, patch
+
+from fastapi.testclient import TestClient
 from werkzeug.security import generate_password_hash
+
 from app import app
 
 client = TestClient(app)

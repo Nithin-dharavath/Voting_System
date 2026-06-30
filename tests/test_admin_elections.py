@@ -1,8 +1,11 @@
 import re
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
-from app import app, COOKIE_NAME, CSRF_COOKIE_NAME, create_access_token
+
+from app import COOKIE_NAME, CSRF_COOKIE_NAME, app, create_access_token
+
 
 @pytest.fixture
 def client():

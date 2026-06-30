@@ -1,8 +1,11 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch
 from werkzeug.security import generate_password_hash
-from app import app, COOKIE_NAME
+
+from app import COOKIE_NAME, app
+
 
 @pytest.fixture
 def client():

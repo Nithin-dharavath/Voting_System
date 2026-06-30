@@ -1,9 +1,10 @@
-import pytest
-from fastapi.testclient import TestClient
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
-from app import app, JWT_SECRET, JWT_ALGORITHM, COOKIE_NAME, CSRF_COOKIE_NAME
+
 import jwt
-from datetime import datetime, timedelta, timezone
+from fastapi.testclient import TestClient
+
+from app import COOKIE_NAME, JWT_ALGORITHM, JWT_SECRET, app
 
 client = TestClient(app)
 
@@ -14,7 +15,7 @@ def create_test_token(user_id: int, role: str, email: str):
         "user_id": user_id,
         "role": role,
         "email": email,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=24)
+        "exp": datetime.now(UTC) + timedelta(hours=24)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 

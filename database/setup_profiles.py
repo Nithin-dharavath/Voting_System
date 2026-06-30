@@ -1,5 +1,6 @@
 from database.connection import get_db_cursor
 
+
 def setup_profile_icons():
     print("\n--- Setting up Profile Icons Table ---")
     try:

@@ -1,6 +1,7 @@
-import sys
 from werkzeug.security import generate_password_hash
+
 from database.connection import get_db_cursor
+
 
 def create_admin():
     print("\n--- Admin Account Setup ---")
