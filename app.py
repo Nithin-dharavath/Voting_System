@@ -69,11 +69,12 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 os.makedirs("uploads/profiles", exist_ok=True)
 os.makedirs("uploads/selfies", exist_ok=True)
 os.makedirs("uploads/signatures", exist_ok=True)
+
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 templates = Jinja2Templates(directory="templates")
 
