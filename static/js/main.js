@@ -113,6 +113,9 @@ function setupPasswordStrength() {
     const passwordField = document.getElementById('password');
     if (!passwordField) return;
 
+    const form = passwordField.closest('form');
+    if (!form || form.getAttribute('action') !== '/auth/register') return;
+
     const container = document.createElement('div');
     container.className = 'password-strength-container';
 
@@ -162,7 +165,6 @@ function setupPasswordStrength() {
         else barFill.classList.add('strength-strong');
     });
 
-    const form = passwordField.closest('form');
     if (form) {
         form.addEventListener('submit', (e) => {
             const val = passwordField.value;

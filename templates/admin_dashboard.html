@@ -87,7 +87,7 @@
                                     {% endif %}
                                     </span>
                                 </td>
-                                <td style="color: #94a3b8; font-size: 0.8rem;">{{ act.acted_at.strftime('%Y-%m-%d %H:%M') if act.acted_at else 'N/A' }}</td>
+                                <td style="color: #94a3b8; font-size: 0.8rem;">{{ act.acted_at if act.acted_at else 'N/A' }}</td>
                             </tr>
                             {% endfor %}
                             {% if not recent_activity %}

@@ -8,6 +8,8 @@
         <p>Published results from completed elections. Tap any election to see the full breakdown.</p>
     </div>
 
+    {% if total is defined %}<p style="font-size: 0.8rem; color: #94a3b8;">{{ total }} election(s) with published results</p>{% endif %}
+
     {% if election_results %}
     <div class="results-list">
         {% for item in election_results %}
@@ -80,6 +82,21 @@
         </div>
         {% endfor %}
     </div>
+
+    {% if total_pages > 1 %}
+    <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1.5rem;">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none;">&laquo; Prev</a>
+        {% endif %}
+        <span style="display: flex; align-items: center; padding: 0 1rem; font-size: 0.875rem; color: #64748b;">
+            Page {{ page }} of {{ total_pages }}
+        </span>
+        {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none;">Next &raquo;</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
     {% else %}
     <div class="empty-state">
         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 1rem; display: block; opacity: 0.5;"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>

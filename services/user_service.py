@@ -2,6 +2,7 @@ import logging
 
 from database.connection import get_db_cursor
 from exceptions import NotFoundError
+from services.cache_service import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,15 @@ def get_user_candidate_applications(user_id: int) -> list[dict]:
         return applications
 
 
-def get_distinct_departments() -> list[str]:
+def get_distinct_departments(use_cache: bool = True) -> list[str]:
+    cache_key = "departments:list"
+    if use_cache:
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return cached
     with get_db_cursor() as cursor:
         cursor.execute("SELECT DISTINCT department FROM users WHERE department IS NOT NULL")
-        return [row["department"] for row in cursor.fetchall()]
+        result = [row["department"] for row in cursor.fetchall()]
+    if use_cache:
+        cache_set(cache_key, result, ttl=300)
+    return result

@@ -2,6 +2,7 @@ import json
 import logging
 
 from database.connection import get_db_cursor
+from services.cache_service import cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
@@ -91,13 +92,29 @@ def get_audit_logs(
     return logs, total
 
 
-def get_action_types() -> list[str]:
+def get_action_types(use_cache: bool = True) -> list[str]:
+    cache_key = "audit:action_types"
+    if use_cache:
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return cached
     with get_db_cursor() as cursor:
         cursor.execute("SELECT DISTINCT action_type FROM audit_log ORDER BY action_type")
-        return [row["action_type"] for row in cursor.fetchall()]
+        result = [row["action_type"] for row in cursor.fetchall()]
+    if use_cache:
+        cache_set(cache_key, result, ttl=300)
+    return result
 
 
-def get_target_types() -> list[str]:
+def get_target_types(use_cache: bool = True) -> list[str]:
+    cache_key = "audit:target_types"
+    if use_cache:
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return cached
     with get_db_cursor() as cursor:
         cursor.execute("SELECT DISTINCT target_type FROM audit_log ORDER BY target_type")
-        return [row["target_type"] for row in cursor.fetchall()]
+        result = [row["target_type"] for row in cursor.fetchall()]
+    if use_cache:
+        cache_set(cache_key, result, ttl=300)
+    return result

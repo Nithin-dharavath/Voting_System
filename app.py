@@ -4,10 +4,11 @@ import time
 from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import Scope
 
 from config import settings
 from database.connection import get_db_cursor
@@ -21,9 +22,9 @@ from services.auth_service import decode_access_token as auth_decode_token
 from services.candidate_service import (
     apply_as_candidate,
     bulk_update_candidate_status,
-    get_applications_by_status,
+    get_applications_by_status_paginated,
     get_approved_candidates_for_election,
-    get_election_candidates,
+    get_election_candidates_paginated,
     get_student_candidacy_status,
     get_user_applications,
     has_user_applied,
@@ -37,13 +38,14 @@ from services.election_service import (
     delete_election,
     ensure_datetime,
     get_active_elections_count,
-    get_all_elections,
     get_dashboard_stats,
     get_election_by_id,
     get_election_results,
+    get_elections_by_status_paginated,
     get_elections_paginated,
-    get_elections_with_results,
-    get_published_ended_elections,
+    get_elections_results_batch,
+    get_ended_elections_paginated,
+    get_published_ended_elections_paginated,
     get_recent_activity,
     get_upcoming_elections,
     get_vote_trend,
@@ -77,7 +79,16 @@ app = FastAPI(
     version="1.0.0",
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+class CachedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=3600, immutable"
+        return response
+
+
+app.mount("/static", CachedStaticFiles(directory="static"), name="static")
 
 os.makedirs(f"{settings.upload_dir}/profiles", exist_ok=True)
 os.makedirs(f"{settings.upload_dir}/selfies", exist_ok=True)
@@ -145,6 +156,10 @@ SUCCESS_MESSAGE_MAP = {
     "created": "Election created successfully!",
     "updated": "Election updated successfully!",
     "deleted": "Election removed successfully!",
+}
+
+ERROR_MESSAGE_MAP = {
+    "internal": "An internal error occurred. Please try again.",
 }
 
 
@@ -224,7 +239,13 @@ async def verify_csrf(request: Request, csrf_token: str = Form(None)):
 
 
 def set_csrf_cookie(response, csrf_token: str):
-    response.set_cookie(CSRF_COOKIE_NAME, csrf_token, httponly=False, samesite="lax", secure=True)
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        csrf_token,
+        httponly=False,
+        samesite="lax",
+        secure=settings.environment == "production",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +341,7 @@ async def login_user(
             value=result["token"],
             httponly=True,
             samesite="lax",
-            secure=True,
+            secure=settings.environment == "production",
         )
         breach_warning = result.get("breach_warning")
         if breach_warning:
@@ -360,7 +381,7 @@ async def admin_login_user(
             value=result["token"],
             httponly=True,
             samesite="lax",
-            secure=True,
+            secure=settings.environment == "production",
         )
         return response
     except AuthError as e:
@@ -417,15 +438,34 @@ async def student_dashboard(request: Request, user=Depends(get_current_user)):
 
 
 @app.get("/student/elections", response_class=HTMLResponse, tags=["Student"])
-async def student_elections_list(request: Request, user=Depends(student_guard)):
-    elections = get_all_elections()
-    active = [e for e in elections if e["status"] == "ACTIVE"]
-    upcoming = [e for e in elections if e["status"] == "UPCOMING"]
-    ended = [e for e in elections if e["status"] == "ENDED"]
+async def student_elections_list(
+    request: Request,
+    tab: str = "active",
+    page: int = 1,
+    user=Depends(student_guard),
+):
+    per_page = 10
+    status_map = {"active": "ACTIVE", "upcoming": "UPCOMING", "ended": "ENDED"}
+    db_status = status_map.get(tab, "ACTIVE")
+    try:
+        elections, total = get_elections_by_status_paginated(db_status, page, per_page)
+    except Exception:
+        logger.exception("Failed to fetch elections")
+        elections = []
+        total = 0
+    total_pages = max(1, (int(total) + per_page - 1) // per_page)
     return templates.TemplateResponse(
         request,
         "student_elections.html",
-        {"request": request, "active": active, "upcoming": upcoming, "ended": ended, "user": user},
+        {
+            "request": request,
+            "elections": elections,
+            "tab": tab,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+            "user": user,
+        },
     )
 
 
@@ -645,18 +685,45 @@ async def student_export_election_results(
 
 
 @app.get("/student/results", response_class=HTMLResponse, tags=["Student"])
-async def student_results_overview(request: Request, user=Depends(student_guard)):
-    elections = get_published_ended_elections()
+async def student_results_overview(
+    request: Request,
+    page: int = 1,
+    user=Depends(student_guard),
+):
+    per_page = 10
+    try:
+        elections, total = get_published_ended_elections_paginated(page, per_page)
+    except Exception:
+        logger.exception("Failed to fetch published elections")
+        elections = []
+        total = 0
+    ids = [e["id"] for e in elections]
+    if ids:
+        try:
+            batch = get_elections_results_batch(ids)
+        except Exception:
+            logger.exception("Failed to fetch batch results")
+            batch = {}
+    else:
+        batch = {}
     election_results = []
     for election in elections:
-        results, total_votes = get_election_results(election["id"])
+        results, total_votes = batch.get(election["id"], ([], 0))
         election_results.append(
             {"election": election, "results": results, "total_votes": total_votes}
         )
+    total_pages = max(1, (int(total) + per_page - 1) // per_page)
     return templates.TemplateResponse(
         request,
         "student_results.html",
-        {"request": request, "user": user, "election_results": election_results},
+        {
+            "request": request,
+            "user": user,
+            "election_results": election_results,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+        },
     )
 
 
@@ -798,6 +865,8 @@ async def list_elections(
     total_pages = max(1, (int(total) + per_page - 1) // per_page)
     success_key = request.query_params.get("success")
     success_message = SUCCESS_MESSAGE_MAP.get(success_key) if success_key else None
+    error_key = request.query_params.get("error")
+    error_message = ERROR_MESSAGE_MAP.get(error_key) if error_key else None
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
@@ -813,6 +882,7 @@ async def list_elections(
             "date_from": date_from,
             "date_to": date_to,
             "success_message": success_message,
+            "error_message": error_message,
             "csrf_token": csrf_token,
         },
     )
@@ -1105,16 +1175,21 @@ async def admin_candidates_list(
     sort: str = "date",
     order: str = "ASC",
     category: str | None = None,
+    page: int = 1,
     user=Depends(admin_guard),
 ):
+    per_page = 20
     try:
         departments = get_distinct_departments()
-        applications = get_applications_by_status(status, sort, order, category)
+        applications, total = get_applications_by_status_paginated(
+            status, page, per_page, sort, order, category
+        )
     except Exception:
         logger.exception(f"Failed to fetch {status} candidates")
         return RedirectResponse(
             url=f"/admin/candidates?status={status}&error=internal", status_code=303
         )
+    total_pages = max(1, (int(total) + per_page - 1) // per_page)
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
@@ -1129,6 +1204,9 @@ async def admin_candidates_list(
             "current_category": category,
             "current_sort": sort,
             "current_order": order,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
         },
     )
     set_csrf_cookie(response, csrf_token)
@@ -1141,17 +1219,31 @@ async def admin_candidates_pending_redirect():
 
 
 @app.get("/admin/candidates/approved", response_class=HTMLResponse, tags=["Admin"])
-async def admin_candidates_approved(request: Request, user=Depends(admin_guard)):
+async def admin_candidates_approved(
+    request: Request,
+    page: int = 1,
+    user=Depends(admin_guard),
+):
+    per_page = 20
     try:
-        applications = get_applications_by_status("APPROVED")
+        applications, total = get_applications_by_status_paginated("APPROVED", page, per_page)
     except Exception:
         logger.exception("Failed to fetch approved candidates")
         return RedirectResponse(url="/admin/dashboard?error=internal", status_code=303)
+    total_pages = max(1, (int(total) + per_page - 1) // per_page)
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
         "admin_candidates_approved.html",
-        {"request": request, "applications": applications, "user": user, "csrf_token": csrf_token},
+        {
+            "request": request,
+            "applications": applications,
+            "user": user,
+            "csrf_token": csrf_token,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+        },
     )
     set_csrf_cookie(response, csrf_token)
     return response
@@ -1209,17 +1301,24 @@ async def bulk_candidate_action(
 
 
 @app.get("/admin/elections/{id}/candidates", response_class=HTMLResponse, tags=["Admin"])
-async def admin_election_candidates(request: Request, id: int, user=Depends(admin_guard)):
+async def admin_election_candidates(
+    request: Request,
+    id: int,
+    page: int = 1,
+    user=Depends(admin_guard),
+):
     election = get_election_by_id(id)
     if not election:
         return RedirectResponse(url="/admin/elections", status_code=302)
+    per_page = 20
     try:
-        applications = get_election_candidates(id)
+        applications, total = get_election_candidates_paginated(id, page, per_page)
     except Exception:
         logger.exception("Failed to fetch candidates for election")
         return RedirectResponse(
             url=f"/admin/elections/{id}/candidates?error=internal", status_code=303
         )
+    total_pages = max(1, (int(total) + per_page - 1) // per_page)
     csrf_token = await get_csrf_token(request)
     response = templates.TemplateResponse(
         request,
@@ -1230,6 +1329,9 @@ async def admin_election_candidates(request: Request, id: int, user=Depends(admi
             "user": user,
             "election": election,
             "csrf_token": csrf_token,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
         },
     )
     set_csrf_cookie(response, csrf_token)
@@ -1337,11 +1439,34 @@ async def publish_election_results_route(
 
 
 @app.get("/admin/results", response_class=HTMLResponse, tags=["Admin"])
-async def admin_results_overview(request: Request, user=Depends(admin_guard)):
+async def admin_results_overview(
+    request: Request,
+    page: int = 1,
+    user=Depends(admin_guard),
+):
+    per_page = 10
     try:
-        election_results = get_elections_with_results()
+        elections, total = get_ended_elections_paginated(page, per_page)
     except Exception:
-        election_results = []
+        logger.exception("Failed to fetch ended elections")
+        elections = []
+        total = 0
+    ids = [e["id"] for e in elections]
+    if ids:
+        try:
+            batch = get_elections_results_batch(ids)
+        except Exception:
+            logger.exception("Failed to fetch batch results")
+            batch = {}
+    else:
+        batch = {}
+    election_results = []
+    for election in elections:
+        results, total_votes = batch.get(election["id"], ([], 0))
+        election_results.append(
+            {"election": election, "results": results, "total_votes": total_votes}
+        )
+    total_pages = max(1, (int(total) + per_page - 1) // per_page)
     info_message = None
     if request.query_params.get("success") == "published":
         info_message = "Results have been published to students."
@@ -1353,6 +1478,9 @@ async def admin_results_overview(request: Request, user=Depends(admin_guard)):
             "request": request,
             "user": user,
             "election_results": election_results,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
             "info_message": info_message,
             "csrf_token": csrf_token,
         },
