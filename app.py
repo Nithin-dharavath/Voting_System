@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -8,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from config import settings
 from database.connection import get_db_cursor
 from exceptions import AuthError, ElectionError, NotFoundError, ValidationError, VoteError
 from middleware import AppErrorHandlerMiddleware, RequestLoggingMiddleware
@@ -59,7 +61,7 @@ from services.vote_service import (
     submit_vote_with_verification,
 )
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -70,11 +72,11 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-os.makedirs("uploads/profiles", exist_ok=True)
-os.makedirs("uploads/selfies", exist_ok=True)
-os.makedirs("uploads/signatures", exist_ok=True)
+os.makedirs(f"{settings.upload_dir}/profiles", exist_ok=True)
+os.makedirs(f"{settings.upload_dir}/selfies", exist_ok=True)
+os.makedirs(f"{settings.upload_dir}/signatures", exist_ok=True)
 
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount(f"/{settings.upload_dir}", StaticFiles(directory=settings.upload_dir), name="uploads")
 
 templates = Jinja2Templates(directory="templates")
 
@@ -90,6 +92,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = request.cookies.get(COOKIE_NAME)
         user = auth_decode_token(token) if token else None
         request.state.user = user
+        if user and settings.sentry_dsn:
+            try:
+                import sentry_sdk
+
+                sentry_sdk.set_user(
+                    {
+                        "id": user.get("user_id"),
+                        "email": user.get("email"),
+                        "role": user.get("role"),
+                    }
+                )
+            except ImportError:
+                pass
         return await call_next(request)
 
 
@@ -98,14 +113,26 @@ app.add_middleware(AuthMiddleware)
 # ---------------------------------------------------------------------------
 # Startup
 # ---------------------------------------------------------------------------
-JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-key-change-this-in-env")
-configure_jwt(JWT_SECRET)
+configure_jwt(settings.jwt_secret)
+
+# Sentry
+if settings.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        traces_sample_rate=1.0,
+    )
+
+app.state.startup_time = time.time()
 
 # Re-export for test compatibility
 create_access_token = auth_create_token
 COOKIE_NAME = auth_service.COOKIE_NAME
 CSRF_COOKIE_NAME = auth_service.CSRF_COOKIE_NAME
 JWT_ALGORITHM = auth_service.JWT_ALGORITHM
+JWT_SECRET = settings.jwt_secret
 
 SUCCESS_MESSAGE_MAP = {
     "created": "Election created successfully!",
@@ -113,7 +140,35 @@ SUCCESS_MESSAGE_MAP = {
     "deleted": "Election removed successfully!",
 }
 
-CSRF_COOKIE_NAME = auth_service.CSRF_COOKIE_NAME
+
+# ---------------------------------------------------------------------------
+# Health Check
+# ---------------------------------------------------------------------------
+@app.get("/health", tags=["System"])
+async def health_check():
+    import shutil
+
+    db_ok = False
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute("SELECT 1")
+            db_ok = True
+    except Exception:
+        db_ok = False
+
+    uptime_seconds = time.time() - app.state.startup_time
+    total, used, free = shutil.disk_usage(settings.upload_dir)
+
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "version": "1.0.0",
+        "uptime_seconds": round(uptime_seconds, 2),
+        "database": "connected" if db_ok else "disconnected",
+        "disk_space_mb": {
+            "free": round(free / (1024 * 1024), 2),
+            "total": round(total / (1024 * 1024), 2),
+        },
+    }
 
 
 class RedirectError(Exception):
