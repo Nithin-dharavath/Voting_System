@@ -3,8 +3,6 @@ import os
 import time
 from datetime import UTC, datetime
 
-from typing import Optional
-
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -302,7 +300,7 @@ async def login_user(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
-    remember_me: Optional[str] = Form(None),
+    remember_me: str | None = Form(None),
 ):
     try:
         result = auth_service.authenticate_user(email, password, remember_me=remember_me == "true")
@@ -343,10 +341,12 @@ async def admin_login_user(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
-    remember_me: Optional[str] = Form(None),
+    remember_me: str | None = Form(None),
 ):
     try:
-        result = auth_service.authenticate_user(email, password, require_admin=True, remember_me=remember_me == "true")
+        result = auth_service.authenticate_user(
+            email, password, require_admin=True, remember_me=remember_me == "true"
+        )
         response = RedirectResponse(url="/admin/dashboard?login=success", status_code=303)
         response.set_cookie(
             key=auth_service.COOKIE_NAME,

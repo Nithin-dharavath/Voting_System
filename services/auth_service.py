@@ -133,9 +133,12 @@ def authenticate_user(
     try:
         breach_count = check_password_breached(password)
         if breach_count and breach_count > 0:
-            breach_warning = f"This password has been exposed {breach_count} times in data breaches. Consider changing it."
+            breach_warning = (
+                f"This password has been exposed {breach_count} times in data breaches. "
+                "Consider changing it."
+            )
     except Exception:
-        pass
+        logger.debug("Breach check failed during login", exc_info=True)
 
     token = create_access_token(
         {
