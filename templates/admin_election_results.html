@@ -62,6 +62,11 @@
             </div>
             {% endif %}
 
+            <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap;">
+                <a href="/admin/elections/{{ election.id }}/results/export?format=csv" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none; width: auto;">Download CSV</a>
+                <a href="/admin/elections/{{ election.id }}/results/export?format=pdf" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none; width: auto;">Download PDF</a>
+            </div>
+
             <div class="action-group" style="margin-top: 2rem;">
                 {% if not published %}
                 <form action="/admin/elections/{{ election.id }}/publish-results" method="POST" onsubmit="return confirm('Publish these results to students? This action cannot be undone.');">

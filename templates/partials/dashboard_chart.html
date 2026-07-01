@@ -1,0 +1,47 @@
+<div class="chart-container" style="margin-top: 2rem;">
+    <h3>Vote Trend (Last 7 Days)</h3>
+    <div style="position: relative; height: 200px; margin-top: 1rem;">
+        <canvas id="voteTrendChart"></canvas>
+    </div>
+</div>
+
+{% if vote_trend %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var ctx = document.getElementById('voteTrendChart');
+    if (!ctx) return;
+    ctx = ctx.getContext('2d');
+    var labels = {{ vote_trend | map(attribute='date') | list | tojson }};
+    var data = {{ vote_trend | map(attribute='votes') | list | tojson }};
+    var maxVal = Math.max.apply(null, data) || 1;
+    var barWidth = Math.min(40, (ctx.canvas.parentElement.clientWidth - 40) / labels.length);
+    var padding = 20;
+    var chartHeight = ctx.canvas.height - padding * 2;
+    var chartWidth = ctx.canvas.width - padding * 2;
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '10px Inter, sans-serif';
+    ctx.textAlign = 'center';
+
+    labels.forEach(function(label, i) {
+        var x = padding + i * (chartWidth / labels.length) + (chartWidth / labels.length) / 2;
+        var barH = (data[i] / maxVal) * chartHeight;
+        var y = padding + chartHeight - barH;
+
+        var grad = ctx.createLinearGradient(x - barWidth / 2, y, x - barWidth / 2, padding + chartHeight);
+        grad.addColorStop(0, '#3b82f6');
+        grad.addColorStop(1, '#93c5fd');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(x - barWidth / 2, y, barWidth, barH, [4, 4, 0, 0]);
+        ctx.fill();
+
+        ctx.fillStyle = '#64748b';
+        var shortLabel = label.substring(5);
+        ctx.fillText(shortLabel, x, padding + chartHeight + 15);
+        ctx.fillText(data[i], x, y - 5);
+    });
+});
+</script>
+{% endif %}

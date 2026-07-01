@@ -15,21 +15,44 @@
             <main class="admin-main">
                 <div class="dashboard-grid">
                     <div class="stat-card">
-                        <h3>Total Students</h3>
-                        <div class="value">{{ stats.total_students }}</div>>
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                            <span style="font-size: 1.5rem;">👥</span>
+                            <h3 style="margin: 0;">Total Students</h3>
+                        </div>
+                        <div class="value">{{ stats.total_students or 0 }}</div>
                         <p style="font-size: 0.75rem; color: #64748b;">Registered users</p>
                     </div>
                     <div class="stat-card">
-                        <h3>Active Elections</h3>
-                        <div class="value">{{ stats.active_elections }}</div>>
-                        <p style="font-size: 0.75rem; color: #64748b;">Currently ongoing</p>
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                            <span style="font-size: 1.5rem;">📊</span>
+                            <h3 style="margin: 0;">Total Elections</h3>
+                        </div>
+                        <div class="value">{{ stats.total_elections or 0 }}</div>
+                        <p style="font-size: 0.75rem; color: #64748b;">
+                            {{ stats.active_elections or 0 }} active
+                        </p>
+                    </div>
+                    <div class="stat-card">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                            <span style="font-size: 1.5rem;">🗳️</span>
+                            <h3 style="margin: 0;">Total Votes</h3>
+                        </div>
+                        <div class="value">{{ stats.total_votes or 0 }}</div>
+                        <p style="font-size: 0.75rem; color: #64748b;">
+                            {{ stats.turnout_percentage or 0 }}% turnout
+                        </p>
                     </div>
                     <a href="/admin/candidates" class="stat-card" style="text-decoration: none; color: inherit;">
-                        <h3>Pending Apps</h3>
-                        <div class="value">{{ stats.pending_apps }}</div>>
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                            <span style="font-size: 1.5rem;">⏳</span>
+                            <h3 style="margin: 0;">Pending Apps</h3>
+                        </div>
+                        <div class="value">{{ stats.pending_apps or 0 }}</div>
                         <p style="font-size: 0.75rem; color: #64748b;">Candidates to review</p>
                     </a>
                 </div>
+
+                {% include 'partials/dashboard_chart.html' %}
 
                 <div style="margin-top: 2rem;">
                     <h3>Recent Activity</h3>
@@ -46,6 +69,13 @@
                             <tr>
                                 <td>{{ act.full_name }}</td>
                                 <td>
+                                    <span class="status-badge" style="
+                                        {% if act.action_type == 'candidacy' %}background: #eff6ff; color: #1d4ed8;
+                                        {% elif act.action_type == 'vote' %}background: #ecfdf5; color: #047857;
+                                        {% elif act.action_type == 'election_created' %}background: #f5f3ff; color: #6d28d9;
+                                        {% else %}background: #f8fafc; color: #475569;
+                                        {% endif %}
+                                    ">
                                     {% if act.action_type == 'candidacy' %}
                                         Applied for candidacy
                                     {% elif act.action_type == 'vote' %}
@@ -55,17 +85,23 @@
                                     {% else %}
                                         {{ act.action_type }}
                                     {% endif %}
+                                    </span>
                                 </td>
-                                <td>{{ act.acted_at.strftime('%Y-%m-%d %H:%M') if act.acted_at else 'N/A' }}</td>
+                                <td style="color: #94a3b8; font-size: 0.8rem;">{{ act.acted_at.strftime('%Y-%m-%d %H:%M') if act.acted_at else 'N/A' }}</td>
                             </tr>
                             {% endfor %}
                             {% if not recent_activity %}
                             <tr>
-                                <td colspan="3" style="text-align: center; color: #94a3b8;">No recent activity</td>
+                                <td colspan="3" style="text-align: center; color: #94a3b8; padding: 3rem;">No recent activity</td>
                             </tr>
                             {% endif %}
                         </tbody>
                     </table>
+                    {% if recent_activity|length >= 20 %}
+                    <div style="text-align: center; margin-top: 1rem;">
+                        <small style="color: #94a3b8;">Showing last 20 activities</small>
+                    </div>
+                    {% endif %}
                 </div>
             </main>
         </div>

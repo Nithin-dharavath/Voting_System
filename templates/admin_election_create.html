@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Create Election - Voting System{% endblock %}
+{% block title %}{{ 'Clone Election' if clone_source else 'Create Election' }} - Voting System{% endblock %}
 
 {% block content %}
 <!-- Lucide Icons -->
@@ -12,8 +12,14 @@
                 <i data-lucide="arrow-left" style="width: 16px; height: 16px;"></i>
                 Back to Elections
             </a>
-            <h2 class="modern-title">Create New Election</h2>
-            <p class="modern-subtitle">Define the title, description and schedule for the upcoming election.</p>
+            <h2 class="modern-title">{{ 'Clone Election' if clone_source else 'Create New Election' }}</h2>
+            <p class="modern-subtitle">
+                {% if clone_source %}
+                    Duplicating "{{ clone_source.title }}" with new dates.
+                {% else %}
+                    Define the title, description and schedule for the upcoming election.
+                {% endif %}
+            </p>
         </div>
 
         {% if error %}
@@ -24,7 +30,7 @@
         {% endif %}
 
         <div class="page-card" style="max-width: 800px; margin: 0 auto; background: white; border-radius: 1.25rem; border: 1px solid #e2e8f0; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.05);">
-            <form action="/admin/elections" method="POST">
+            <form action="{% if clone_source %}/admin/elections/{{ clone_source.id }}/clone{% else %}/admin/elections{% endif %}" method="POST">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
                 <div class="form-group">
@@ -32,7 +38,8 @@
                         <i data-lucide="type" style="width: 14px; height: 14px; color: var(--accent-color);"></i>
                         Election Title
                     </label>
-                    <input type="text" id="title" name="title" required placeholder="e.g. Student Council 2026" value="{{ values.title if values else '' }}">
+                    <input type="text" id="title" name="title" required placeholder="e.g. Student Council 2026"
+                        value="{% if clone_source %}{{ clone_source.title }} (Copy){% elif values %}{{ values.title }}{% endif %}">
                 </div>
 
                 <div class="form-group">
@@ -42,7 +49,7 @@
                     </label>
                     <textarea id="description" name="description" rows="5"
                         style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.5rem; font-family: inherit; font-size: 0.875rem; transition: border-color 0.2s; box-sizing: border-box;"
-                        placeholder="Provide details about this election..." {{ values.description if values else '' }}>{{ values.description if values else '' }}</textarea>
+                        placeholder="Provide details about this election...">{% if clone_source %}{{ clone_source.description or '' }}{% elif values %}{{ values.description }}{% endif %}</textarea>
                 </div>
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
@@ -51,14 +58,16 @@
                             <i data-lucide="calendar-days" style="width: 14px; height: 14px; color: var(--accent-color);"></i>
                             Start Date & Time
                         </label>
-                        <input type="datetime-local" id="start_time" name="start_time" required value="{{ values.start_time if values else '' }}">
+                        <input type="datetime-local" id="start_time" name="start_time" required
+                            value="{% if values %}{{ values.start_time }}{% endif %}">
                     </div>
                     <div class="form-group">
                         <label for="end_time" style="display: flex; align-items: center; gap: 0.5rem;">
                             <i data-lucide="calendar-clock" style="width: 14px; height: 14px; color: var(--accent-color);"></i>
                             End Date & Time
                         </label>
-                        <input type="datetime-local" id="end_time" name="end_time" required value="{{ values.end_time if values else '' }}">
+                        <input type="datetime-local" id="end_time" name="end_time" required
+                            value="{% if values %}{{ values.end_time }}{% endif %}">
                     </div>
                 </div>
 
@@ -66,7 +75,7 @@
                     <a href="/admin/elections" class="btn-secondary" style="padding: 0.75rem 1.5rem; font-weight: 600; font-size: 0.875rem;">Cancel</a>
                     <button type="submit" class="btn-primary" style="width: auto; padding: 0.75rem 2rem; cursor: pointer;">
                         <i data-lucide="save" style="width: 16px; height: 16px; margin-right: 0.5rem;"></i>
-                        Save Election
+                        {{ 'Clone Election' if clone_source else 'Save Election' }}
                     </button>
                 </div>
             </form>
@@ -75,7 +84,6 @@
 </div>
 
 <script>
-    // Initialize Lucide icons
     lucide.createIcons();
 </script>
 {% endblock %}

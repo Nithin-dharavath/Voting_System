@@ -207,3 +207,7 @@ Phase 3 covers 15 discrete improvements across 3 categories. Total estimated eff
 | `templates/base.html` | Toast integration |
 | `.env.example` | All new config vars |
 | `requirements.txt` | Add: alembic, pydantic-settings, sentry-sdk, reportlab |
+
+docker run --rm -i `
+-e GITHUB_PERSONAL_ACCESS_TOKEN=$env:GITHUB_TOKEN `
+ghcr.io/github/github-mcp-server

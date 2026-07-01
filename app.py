@@ -14,31 +14,39 @@ from database.connection import get_db_cursor
 from exceptions import AuthError, ElectionError, NotFoundError, ValidationError, VoteError
 from middleware import AppErrorHandlerMiddleware, RequestLoggingMiddleware
 from services import auth_service
+from services.audit_service import get_action_types, get_audit_logs, get_target_types, log_action
 from services.auth_service import configure_jwt
 from services.auth_service import create_access_token as auth_create_token
 from services.auth_service import decode_access_token as auth_decode_token
 from services.candidate_service import (
     apply_as_candidate,
+    bulk_update_candidate_status,
     get_applications_by_status,
     get_approved_candidates_for_election,
     get_election_candidates,
-    get_pending_count,
     get_student_candidacy_status,
     get_user_applications,
     has_user_applied,
     update_candidate_status,
 )
 from services.election_service import (
+    bulk_delete_elections,
+    bulk_publish_results,
+    clone_election,
     create_election,
     delete_election,
     ensure_datetime,
     get_active_elections_count,
     get_all_elections,
+    get_dashboard_stats,
     get_election_by_id,
     get_election_results,
+    get_elections_paginated,
     get_elections_with_results,
     get_published_ended_elections,
+    get_recent_activity,
     get_upcoming_elections,
+    get_vote_trend,
     publish_results,
     update_election,
 )
@@ -48,7 +56,6 @@ from services.file_service import (
 )
 from services.user_service import (
     get_distinct_departments,
-    get_student_count,
     get_user_by_id,
     get_user_candidate_applications,
     update_user_profile,
@@ -594,6 +601,49 @@ async def student_election_results(request: Request, id: int, user=Depends(stude
     )
 
 
+@app.get("/student/elections/{id}/results/export", tags=["Student"])
+async def student_export_election_results(
+    request: Request,
+    id: int,
+    format: str = "csv",
+    user=Depends(student_guard),
+):
+    from services.export_service import export_results_csv, export_results_pdf
+
+    election = get_election_by_id(id)
+    if not election or election["status"] != "ENDED" or not election["result_published"]:
+        return RedirectResponse(url=f"/student/elections/{id}?info=not_published", status_code=302)
+
+    try:
+        if format == "csv":
+            csv_data = export_results_csv(id)
+            if csv_data is None:
+                return RedirectResponse(url=f"/student/elections/{id}/results", status_code=303)
+            from fastapi.responses import StreamingResponse
+
+            return StreamingResponse(
+                iter([csv_data]),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=election_{id}_results.csv"},
+            )
+        elif format == "pdf":
+            pdf_data = export_results_pdf(id)
+            if pdf_data is None:
+                return RedirectResponse(url=f"/student/elections/{id}/results", status_code=303)
+            from fastapi.responses import Response
+
+            return Response(
+                content=pdf_data,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename=election_{id}_results.pdf"},
+            )
+    except Exception:
+        logger.exception("Student export failed")
+        return RedirectResponse(
+            url=f"/student/elections/{id}/results?error=internal", status_code=303
+        )
+
+
 @app.get("/student/results", response_class=HTMLResponse, tags=["Student"])
 async def student_results_overview(request: Request, user=Depends(student_guard)):
     elections = get_published_ended_elections()
@@ -698,39 +748,15 @@ async def submit_student_verification(
 @app.get("/admin/dashboard", response_class=HTMLResponse, tags=["Admin"])
 async def admin_dashboard(request: Request, user=Depends(admin_guard)):
     try:
-        total_students = get_student_count()
+        stats = get_dashboard_stats()
     except Exception:
-        total_students = 0
+        stats = {}
     try:
-        active_elections = get_active_elections_count()
+        vote_trend = get_vote_trend(days=7)
     except Exception:
-        active_elections = 0
+        vote_trend = []
     try:
-        pending_apps = get_pending_count()
-    except Exception:
-        pending_apps = 0
-    try:
-        with get_db_cursor() as cursor:
-            cursor.execute(
-                """
-                (SELECT u.full_name, 'candidacy' as action_type, ca.applied_at as acted_at
-                 FROM candidate_applications ca
-                 JOIN users u ON ca.user_id = u.user_id
-                 ORDER BY ca.applied_at DESC LIMIT 5)
-                UNION ALL
-                (SELECT u.full_name, 'vote' as action_type, v.voted_at as acted_at
-                 FROM votes v
-                 JOIN users u ON v.voter_id = u.user_id
-                 ORDER BY v.voted_at DESC LIMIT 5)
-                UNION ALL
-                (SELECT u.full_name, 'election_created' as action_type, e.created_at as acted_at
-                 FROM elections e
-                 JOIN users u ON e.created_by = u.user_id
-                 ORDER BY e.created_at DESC LIMIT 5)
-                ORDER BY acted_at DESC LIMIT 10
-                """
-            )
-            recent_activity = cursor.fetchall()
+        recent_activity = get_recent_activity(limit=20)
     except Exception:
         recent_activity = []
     return templates.TemplateResponse(
@@ -738,19 +764,38 @@ async def admin_dashboard(request: Request, user=Depends(admin_guard)):
         name="admin_dashboard.html",
         context={
             "user": user,
-            "stats": {
-                "total_students": total_students,
-                "active_elections": active_elections,
-                "pending_apps": pending_apps,
-            },
+            "stats": stats,
+            "vote_trend": vote_trend,
             "recent_activity": recent_activity,
         },
     )
 
 
 @app.get("/admin/elections", response_class=HTMLResponse, tags=["Admin"])
-async def list_elections(request: Request, user=Depends(admin_guard)):
-    elections = get_all_elections()
+async def list_elections(
+    request: Request,
+    page: int = 1,
+    search: str | None = None,
+    status_filter: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    user=Depends(admin_guard),
+):
+    per_page = 10
+    try:
+        elections, total = get_elections_paginated(
+            page=page,
+            per_page=per_page,
+            search=search,
+            status_filter=status_filter,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except Exception:
+        logger.exception("Failed to fetch elections")
+        elections = []
+        total = 0
+    total_pages = max(1, (int(total) + per_page - 1) // per_page)
     success_key = request.query_params.get("success")
     success_message = SUCCESS_MESSAGE_MAP.get(success_key) if success_key else None
     csrf_token = await get_csrf_token(request)
@@ -760,6 +805,13 @@ async def list_elections(request: Request, user=Depends(admin_guard)):
         {
             "request": request,
             "elections": elections,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+            "search": search,
+            "status_filter": status_filter,
+            "date_from": date_from,
+            "date_to": date_to,
             "success_message": success_message,
             "csrf_token": csrf_token,
         },
@@ -811,6 +863,13 @@ async def create_election_route(
         return response
     try:
         create_election(title, description, start_time, end_time, user["user_id"])
+        log_action(
+            user_id=user["user_id"],
+            action_type="ELECTION_CREATED",
+            target_type="ELECTION",
+            details={"title": title, "start_time": start_time, "end_time": end_time},
+            ip_address=request.client.host if request.client else None,
+        )
         return RedirectResponse(url="/admin/elections?success=created", status_code=303)
     except ValidationError as e:
         csrf_token = await get_csrf_token(request)
@@ -896,6 +955,14 @@ async def update_election_route(
         return response
     try:
         update_election(id, title, description, start_time, end_time)
+        log_action(
+            user_id=user["user_id"],
+            action_type="ELECTION_UPDATED",
+            target_type="ELECTION",
+            target_id=id,
+            details={"title": title, "start_time": start_time, "end_time": end_time},
+            ip_address=request.client.host if request.client else None,
+        )
         return RedirectResponse(url="/admin/elections?success=updated", status_code=303)
     except ValidationError as e:
         election = get_election_by_id(id)
@@ -933,10 +1000,101 @@ async def delete_election_route(
     csrf_token=Depends(verify_csrf),
 ):
     try:
+        try:
+            election = get_election_by_id(id)
+            election_title = election["title"] if election else None
+        except Exception:
+            election_title = None
         delete_election(id)
+        log_action(
+            user_id=user["user_id"],
+            action_type="ELECTION_DELETED",
+            target_type="ELECTION",
+            target_id=id,
+            details={"title": election_title},
+            ip_address=request.client.host if request.client else None,
+        )
         return RedirectResponse(url="/admin/elections?success=deleted", status_code=303)
     except Exception:
         logger.exception("Failed to delete election")
+        return RedirectResponse(url="/admin/elections?error=internal", status_code=303)
+
+
+@app.get("/admin/elections/{id}/clone", response_class=HTMLResponse, tags=["Admin"])
+async def clone_election_page(request: Request, id: int, user=Depends(admin_guard)):
+    election = get_election_by_id(id)
+    if not election:
+        return RedirectResponse(url="/admin/elections", status_code=302)
+    csrf_token = await get_csrf_token(request)
+    response = templates.TemplateResponse(
+        request,
+        "admin_election_create.html",
+        {
+            "request": request,
+            "csrf_token": csrf_token,
+            "clone_source": election,
+        },
+    )
+    set_csrf_cookie(response, csrf_token)
+    return response
+
+
+@app.post("/admin/elections/{id}/clone", tags=["Admin"])
+async def clone_election_route(
+    request: Request,
+    id: int,
+    title: str = Form(...),
+    start_time: str = Form(...),
+    end_time: str = Form(...),
+    user=Depends(admin_guard),
+    csrf_token=Depends(verify_csrf),
+):
+    try:
+        clone_election(id, title, start_time, end_time, user["user_id"])
+        log_action(
+            user_id=user["user_id"],
+            action_type="ELECTION_CLONED",
+            target_type="ELECTION",
+            target_id=id,
+            details={"new_title": title},
+            ip_address=request.client.host if request.client else None,
+        )
+        return RedirectResponse(url="/admin/elections?success=created", status_code=303)
+    except Exception:
+        logger.exception("Failed to clone election")
+        return RedirectResponse(url="/admin/elections?error=internal", status_code=303)
+
+
+@app.post("/admin/elections/bulk-action", tags=["Admin"])
+async def bulk_election_action(
+    request: Request,
+    election_ids: list[int] = Form(...),
+    bulk_action: str = Form(...),
+    user=Depends(admin_guard),
+    csrf_token=Depends(verify_csrf),
+):
+    try:
+        if bulk_action == "delete":
+            bulk_delete_elections(election_ids)
+            log_action(
+                user_id=user["user_id"],
+                action_type="ELECTIONS_BULK_DELETED",
+                target_type="ELECTION",
+                details={"count": len(election_ids), "ids": election_ids},
+                ip_address=request.client.host if request.client else None,
+            )
+        elif bulk_action == "publish":
+            bulk_publish_results(election_ids)
+            log_action(
+                user_id=user["user_id"],
+                action_type="RESULTS_BULK_PUBLISHED",
+                target_type="ELECTION",
+                details={"count": len(election_ids), "ids": election_ids},
+                ip_address=request.client.host if request.client else None,
+            )
+        return RedirectResponse(url="/admin/elections?success=updated", status_code=303)
+    except Exception:
+        logger.exception("Bulk action failed")
         return RedirectResponse(url="/admin/elections?error=internal", status_code=303)
 
 
@@ -1009,6 +1167,13 @@ async def update_candidate_status_route(
 ):
     try:
         update_candidate_status(id, action, user["user_id"])
+        log_action(
+            user_id=user["user_id"],
+            action_type="CANDIDATE_" + ("APPROVED" if action == "approve" else "REJECTED"),
+            target_type="CANDIDATE_APPLICATION",
+            target_id=id,
+            ip_address=request.client.host if request.client else None,
+        )
         return RedirectResponse(url="/admin/candidates", status_code=303)
     except ValidationError:
         return RedirectResponse(
@@ -1016,6 +1181,30 @@ async def update_candidate_status_route(
         )
     except Exception:
         logger.exception(f"Failed to {action} candidate")
+        return RedirectResponse(url="/admin/candidates?error=internal", status_code=303)
+
+
+@app.post("/admin/candidates/bulk-action", tags=["Admin"])
+async def bulk_candidate_action(
+    request: Request,
+    candidate_ids: list[int] = Form(...),
+    bulk_action: str = Form(...),
+    user=Depends(admin_guard),
+    csrf_token=Depends(verify_csrf),
+):
+    try:
+        bulk_update_candidate_status(candidate_ids, bulk_action, user["user_id"])
+        action_label = "APPROVED" if bulk_action == "approve" else "REJECTED"
+        log_action(
+            user_id=user["user_id"],
+            action_type=f"CANDIDATES_BULK_{action_label}",
+            target_type="CANDIDATE_APPLICATION",
+            details={"count": len(candidate_ids), "ids": candidate_ids},
+            ip_address=request.client.host if request.client else None,
+        )
+        return RedirectResponse(url="/admin/candidates", status_code=303)
+    except Exception:
+        logger.exception("Bulk candidate action failed")
         return RedirectResponse(url="/admin/candidates?error=internal", status_code=303)
 
 
@@ -1080,6 +1269,45 @@ async def admin_election_results(request: Request, id: int, user=Depends(admin_g
     return response
 
 
+@app.get("/admin/elections/{id}/results/export", tags=["Admin"])
+async def export_election_results(
+    request: Request,
+    id: int,
+    format: str = "csv",
+    user=Depends(admin_guard),
+):
+    from services.export_service import export_results_csv, export_results_pdf
+
+    try:
+        if format == "csv":
+            csv_data = export_results_csv(id)
+            if csv_data is None:
+                return RedirectResponse(url="/admin/elections", status_code=303)
+            from fastapi.responses import StreamingResponse
+
+            return StreamingResponse(
+                iter([csv_data]),
+                media_type="text/csv",
+                headers={"Content-Disposition": f"attachment; filename=election_{id}_results.csv"},
+            )
+        elif format == "pdf":
+            pdf_data = export_results_pdf(id)
+            if pdf_data is None:
+                return RedirectResponse(url="/admin/elections", status_code=303)
+            from fastapi.responses import Response
+
+            return Response(
+                content=pdf_data,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f"attachment; filename=election_{id}_results.pdf"},
+            )
+    except Exception:
+        logger.exception("Export failed")
+        return RedirectResponse(
+            url=f"/admin/elections/{id}/results?error=internal", status_code=303
+        )
+
+
 @app.post("/admin/elections/{id}/publish-results", tags=["Admin"])
 async def publish_election_results_route(
     request: Request,
@@ -1089,6 +1317,13 @@ async def publish_election_results_route(
 ):
     try:
         publish_results(id)
+        log_action(
+            user_id=user["user_id"],
+            action_type="RESULTS_PUBLISHED",
+            target_type="ELECTION",
+            target_id=id,
+            ip_address=request.client.host if request.client else None,
+        )
         return RedirectResponse(
             url=f"/admin/elections/{id}/results?success=published", status_code=303
         )
@@ -1124,6 +1359,59 @@ async def admin_results_overview(request: Request, user=Depends(admin_guard)):
     )
     set_csrf_cookie(response, csrf_token)
     return response
+
+
+# ---------------------------------------------------------------------------
+# Audit Log Route
+# ---------------------------------------------------------------------------
+@app.get("/admin/audit", response_class=HTMLResponse, tags=["Admin"])
+async def admin_audit_logs(
+    request: Request,
+    page: int = 1,
+    action_type: str | None = None,
+    target_type: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    user=Depends(admin_guard),
+):
+    per_page = 20
+    try:
+        logs, total = get_audit_logs(
+            page=page,
+            per_page=per_page,
+            action_type=action_type,
+            target_type=target_type,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        action_types = get_action_types()
+        target_types = get_target_types()
+    except Exception:
+        logger.exception("Failed to fetch audit logs")
+        logs = []
+        total = 0
+        action_types = []
+        target_types = []
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    return templates.TemplateResponse(
+        request,
+        "admin_audit.html",
+        {
+            "request": request,
+            "logs": logs,
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+            "filters": {
+                "action_type": action_type,
+                "target_type": target_type,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
+            "action_types": action_types,
+            "target_types": target_types,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1208,6 +1496,14 @@ async def admin_update_user_profile_route(
         if profile_pic and profile_pic.filename:
             profile_path = validate_and_save_profile_picture(id, profile_pic)
         update_user_profile(id, full_name, department, academic_year, profile_path)
+        log_action(
+            user_id=user["user_id"],
+            action_type="USER_PROFILE_UPDATED",
+            target_type="USER",
+            target_id=id,
+            details={"full_name": full_name, "department": department},
+            ip_address=request.client.host if request.client else None,
+        )
         return RedirectResponse(url=f"/admin/users/{id}/profile?success=updated", status_code=303)
     except Exception:
         logger.exception("Admin failed to update user profile")
