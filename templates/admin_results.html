@@ -104,6 +104,8 @@
 
                     <div class="results-card-footer">
                         <a href="/admin/elections/{{ item.election.id }}/results" class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.8rem;">View Full Details</a>
+                        <a href="/admin/elections/{{ item.election.id }}/results/export?format=csv" class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.8rem;">CSV</a>
+                        <a href="/admin/elections/{{ item.election.id }}/results/export?format=pdf" class="btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.8rem;">PDF</a>
                         {% if not item.election.result_published %}
                         <form action="/admin/elections/{{ item.election.id }}/publish-results" method="POST" onsubmit="return confirm('Publish these results to students? This action cannot be undone.');" style="margin: 0;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

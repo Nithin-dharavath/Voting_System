@@ -164,6 +164,21 @@ def get_pending_count() -> int:
         return cursor.fetchone()["count"]
 
 
+def bulk_update_candidate_status(ids: list[int], action: str, reviewed_by: int):
+    if not ids:
+        return
+    if action not in ("approve", "reject"):
+        raise ValidationError("Invalid action. Must be 'approve' or 'reject'.")
+    status = "APPROVED" if action == "approve" else "REJECTED"
+    placeholders = ",".join(["%s"] * len(ids))
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            f"UPDATE candidate_applications SET approval_status = %s, reviewed_by = %s"  # noqa: S608
+            f" WHERE id IN ({placeholders})",
+            (status, reviewed_by, *ids),
+        )
+
+
 def get_student_candidacy_status(user_id: int) -> str | None:
     with get_db_cursor() as cursor:
         cursor.execute(

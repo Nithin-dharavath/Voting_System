@@ -47,6 +47,11 @@
             No approved candidates participated in this election.
         </div>
         {% endif %}
+
+        <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap;">
+            <a href="/student/elections/{{ election.id }}/results/export?format=csv" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none; width: auto;">Download CSV</a>
+            <a href="/student/elections/{{ election.id }}/results/export?format=pdf" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none; width: auto;">Download PDF</a>
+        </div>
     </div>
 </div>
 {% endblock %}

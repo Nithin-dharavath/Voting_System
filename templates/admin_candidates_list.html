@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- Lucide Icons -->
 <script src="https://unpkg.com/lucide@latest"></script>
 
 <div class="modern-page-wrapper">
@@ -45,7 +44,7 @@
                 <input type="hidden" name="status" value="{{ current_status }}">
 
                 <div class="filter-group">
-                    <label style="font-size: 0.85rem; color: #64748b; margin-right: 0.5rem;">Category:</label>
+                    <label style="font-size: 0.85rem; color: #64748b; margin-right: 0.5rem;">Department:</label>
                     <select name="category" onchange="this.form.submit()" class="modern-select">
                         <option value="">All Departments</option>
                         {% for dept in departments %}
@@ -72,7 +71,7 @@
                 </div>
 
                 {% if current_category %}
-                <a href="/admin/candidates?status={{ current_status }}" class="btn-modern-reset">
+                <a href="/admin/candidates?status={{ current_status }}" class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.75rem; text-decoration: none;">
                     <i data-lucide="rotate-ccw" style="width: 14px; height: 14px;"></i>
                     Reset Filters
                 </a>
@@ -81,95 +80,119 @@
         </div>
 
         {% if applications %}
-        <div class="modern-table-container">
-            <table class="modern-table">
-                <thead>
-                    <tr>
-                        <th>
-                            <div class="icon-wrapper">
-                                <i data-lucide="user" style="width: 14px; height: 14px; color: #6366f1;"></i>
-                                Student Name
-                            </div>
-                        </th>
-                        <th>
-                            <div class="icon-wrapper">
-                                <i data-lucide="award" style="width: 14px; height: 14px; color: #a855f7;"></i>
-                                Election
-                            </div>
-                        </th>
-                        {% if current_status == 'PENDING' %}
-                        <th>
-                            <div class="icon-wrapper">
-                                <i data-lucide="file-text" style="width: 14px; height: 14px; color: #ec4899;"></i>
-                                Manifesto
-                            </div>
-                        </th>
-                        {% endif %}
-                        <th>
-                            <div class="icon-wrapper">
-                                <i data-lucide="calendar" style="width: 14px; height: 14px; color: #f59e0b;"></i>
-                                Applied At
-                            </div>
-                        </th>
-                        {% if current_status == 'PENDING' %}
-                        <th style="text-align: right;">Actions</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for app in applications %}
-                    <tr>
-                        <td>
-                            <div style="display: flex; align-items: center;">
-                                <div class="student-avatar">
-                                    {{ app.applicant_name[0] | upper }}
+        <form id="bulk-candidate-form" method="POST" action="/admin/candidates/bulk-action">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            {% if current_status == 'PENDING' %}
+            <div style="margin-bottom: 1rem; display: flex; gap: 0.75rem; align-items: center;">
+                <span style="font-size: 0.8rem; color: #64748b; font-weight: 600;">Bulk Actions:</span>
+                <button type="submit" name="bulk_action" value="approve" class="btn-modern-approve" style="width: auto;" onclick="return confirm('Approve selected candidates?')">Approve Selected</button>
+                <button type="submit" name="bulk_action" value="reject" class="btn-modern-reject" style="width: auto;" onclick="return confirm('Reject selected candidates?')">Reject Selected</button>
+            </div>
+            {% endif %}
+
+            <div class="modern-table-container">
+                <table class="modern-table">
+                    <thead>
+                        <tr>
+                            {% if current_status == 'PENDING' %}
+                            <th style="width: 40px;"><input type="checkbox" id="select-all" onclick="toggleAllCheckboxes(this)"></th>
+                            {% endif %}
+                            <th>
+                                <div class="icon-wrapper">
+                                    <i data-lucide="user" style="width: 14px; height: 14px; color: #6366f1;"></i>
+                                    Student Name
                                 </div>
-                                <span class="student-name">{{ app.applicant_name }}</span>
-                            </div>
-                        </td>
-                        <td>
-                            <span class="election-pill">
-                                {{ app.election_title if app.election_title else 'N/A' }}
-                            </span>
-                        </td>
-                        {% if current_status == 'PENDING' %}
-                        <td>
-                            <div class="manifesto-text">
-                                {{ app.manifesto }}
-                            </div>
-                        </td>
-                        {% endif %}
-                        <td>
-                            <div class="date-display">
-                                <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
-                                {{ app.applied_at }}
-                            </div>
-                        </td>
-                        {% if current_status == 'PENDING' %}
-                        <td>
-                            <div class="action-buttons">
-                                <form action="/admin/candidates/{{ app.id }}/approve" method="POST" onsubmit="return confirm('Approve this candidate?');" style="margin: 0;">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <button type="submit" class="btn-modern-approve">
-                                        <i data-lucide="check" style="width: 16px; height: 16px;"></i>
-                                        Approve
-                                    </button>
-                                </form>
-                                <form action="/admin/candidates/{{ app.id }}/reject" method="POST" onsubmit="return confirm('Reject this candidate?');" style="margin: 0;">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                                    <button type="submit" class="btn-modern-reject">
-                                        <i data-lucide="x" style="width: 16px; height: 16px;"></i>
-                                        Reject
-                                    </button>
-                                </form>
-                            </div>
-                        </td>
-                        {% endif %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                            </th>
+                            <th>
+                                <div class="icon-wrapper">
+                                    <i data-lucide="award" style="width: 14px; height: 14px; color: #a855f7;"></i>
+                                    Election
+                                </div>
+                            </th>
+                            <th>
+                                <div class="icon-wrapper">
+                                    <i data-lucide="building" style="width: 14px; height: 14px; color: #f59e0b;"></i>
+                                    Department
+                                </div>
+                            </th>
+                            {% if current_status == 'PENDING' %}
+                            <th>
+                                <div class="icon-wrapper">
+                                    <i data-lucide="file-text" style="width: 14px; height: 14px; color: #ec4899;"></i>
+                                    Manifesto
+                                </div>
+                            </th>
+                            {% endif %}
+                            <th>
+                                <div class="icon-wrapper">
+                                    <i data-lucide="calendar" style="width: 14px; height: 14px; color: #f59e0b;"></i>
+                                    Applied At
+                                </div>
+                            </th>
+                            {% if current_status == 'PENDING' %}
+                            <th style="text-align: right;">Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for app in applications %}
+                        <tr>
+                            {% if current_status == 'PENDING' %}
+                            <td><input type="checkbox" name="candidate_ids" value="{{ app.id }}" class="candidate-checkbox"></td>
+                            {% endif %}
+                            <td>
+                                <div style="display: flex; align-items: center;">
+                                    <div class="student-avatar">
+                                        {{ app.applicant_name[0] | upper }}
+                                    </div>
+                                    <span class="student-name">{{ app.applicant_name }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="election-pill">
+                                    {{ app.election_title if app.election_title else 'N/A' }}
+                                </span>
+                            </td>
+                            <td>{{ app.department or '-' }}</td>
+                            {% if current_status == 'PENDING' %}
+                            <td>
+                                <div class="manifesto-text">
+                                    {{ app.manifesto }}
+                                </div>
+                            </td>
+                            {% endif %}
+                            <td>
+                                <div class="date-display">
+                                    <i data-lucide="calendar" style="width: 14px; height: 14px;"></i>
+                                    {{ app.applied_at }}
+                                </div>
+                            </td>
+                            {% if current_status == 'PENDING' %}
+                            <td>
+                                <div class="action-buttons">
+                                    <form action="/admin/candidates/{{ app.id }}/approve" method="POST" onsubmit="return confirm('Approve this candidate?');" style="margin: 0; display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <button type="submit" class="btn-modern-approve" style="width: auto;">
+                                            <i data-lucide="check" style="width: 16px; height: 16px;"></i>
+                                            Approve
+                                        </button>
+                                    </form>
+                                    <form action="/admin/candidates/{{ app.id }}/reject" method="POST" onsubmit="return confirm('Reject this candidate?');" style="margin: 0; display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <button type="submit" class="btn-modern-reject" style="width: auto;">
+                                            <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+                                            Reject
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </form>
         {% else %}
         <div class="empty-state">
             <i data-lucide="clipboard-list" style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5;"></i>
@@ -180,7 +203,9 @@
 </div>
 
 <script>
-    // Initialize Lucide icons
     lucide.createIcons();
+    function toggleAllCheckboxes(source) {
+        document.querySelectorAll('.candidate-checkbox').forEach(cb => cb.checked = source.checked);
+    }
 </script>
 {% endblock %}
