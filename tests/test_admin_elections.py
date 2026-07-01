@@ -163,8 +163,8 @@ def test_create_election_success(admin_client, mock_cursor):
     payload = {
         "title": "New Election",
         "description": "Test Description",
-        "start_time": "2026-07-01T09:00",
-        "end_time": "2026-07-01T17:00",
+        "start_time": "2026-07-15T09:00",
+        "end_time": "2026-07-15T17:00",
         "csrf_token": csrf_token,
     }
     response = admin_client.post("/admin/elections", data=payload, follow_redirects=False)
@@ -252,8 +252,8 @@ def test_update_election_success(admin_client, mock_cursor):
     payload = {
         "title": "Updated Title",
         "description": "Updated Description",
-        "start_time": "2026-07-01T10:00",
-        "end_time": "2026-07-01T18:00",
+        "start_time": "2026-07-15T10:00",
+        "end_time": "2026-07-15T18:00",
         "csrf_token": csrf_token,
     }
     response = admin_client.post("/admin/elections/1/update", data=payload, follow_redirects=False)
