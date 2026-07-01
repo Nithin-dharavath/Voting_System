@@ -15,7 +15,7 @@ def test_register_user_success(mock_cursor):
     payload = {
         "full_name": "John Doe",
         "email": "john@example.com",
-        "password": "password123",
+        "password": "StrongPass1!",
         "department": "Computer Science",
         "academic_year": "2023-2024",
     }
@@ -29,7 +29,7 @@ def test_register_user_success(mock_cursor):
         args, kwargs = call
         if "INSERT INTO users" in args[0]:
             insert_call_found = True
-            assert args[1][2] != "password123"
+            assert args[1][2] != "StrongPass1!"
             break
     assert insert_call_found, "Insert query was not executed"
 
@@ -39,7 +39,7 @@ def test_register_user_duplicate_email(mock_cursor):
     payload = {
         "full_name": "John Doe",
         "email": "duplicate@example.com",
-        "password": "password123",
+        "password": "StrongPass1!",
         "department": "Computer Science",
         "academic_year": "2023-2024",
     }
@@ -57,6 +57,7 @@ def test_register_user_password_too_short():
     }
     response = client.post("/auth/register", data=payload)
     assert response.status_code == 200
+    assert "Password must contain" in response.text
 
 
 def test_register_user_missing_fields():

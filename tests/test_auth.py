@@ -19,7 +19,7 @@ def test_register_student_success(mock_cursor):
         data={
             "full_name": "Test Student",
             "email": email,
-            "password": "password123",
+            "password": "StrongPass1!",
             "department": "Computer Science",
             "academic_year": "2023-24",
         },
@@ -57,7 +57,7 @@ def test_register_student_short_password():
         },
     )
     assert response.status_code == 200
-    assert "Password must be at least 8 characters long" in response.text
+    assert "Password must contain" in response.text
 
 
 def test_student_login_success(mock_cursor):

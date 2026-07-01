@@ -10,7 +10,7 @@
 <body class="{% if request.state.user %}{{ request.state.user.role.lower() }}-auth {% endif %}">
     <a href="#main-content" class="skip-link" style="position:absolute;left:-9999px;top:0;z-index:9999;padding:0.5rem 1rem;background:#0f172a;color:white;text-decoration:none;">Skip to main content</a>
     {% include 'partials/navbar.html' %}
-    <div id="toast-notification" class="toast hidden" role="status" aria-live="polite"></div>
+    {% include 'partials/toast.html' %}
     <main id="main-content" class="container" role="main">
         {% block content %}{% endblock %}
     </main>

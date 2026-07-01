@@ -8,6 +8,7 @@ __pycache__/
 !.env.example
 .pytest_cache/
 .codex/
+.opencode/
 venv/
 .venv/
 .vscode/

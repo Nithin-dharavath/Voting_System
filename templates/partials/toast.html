@@ -1,0 +1,41 @@
+<div id="toast-container" class="toast-container" aria-live="polite">
+    {% if error_message %}
+    <div class="toast toast-error" role="alert">
+        <span class="toast-icon">&#10006;</span>
+        <span class="toast-msg">{{ error_message }}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()" aria-label="Dismiss">&times;</button>
+    </div>
+    {% elif success_message %}
+    <div class="toast toast-success" role="status">
+        <span class="toast-icon">&#10004;</span>
+        <span class="toast-msg">{{ success_message }}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()" aria-label="Dismiss">&times;</button>
+    </div>
+    {% elif info_message %}
+    <div class="toast toast-info" role="status">
+        <span class="toast-icon">&#9432;</span>
+        <span class="toast-msg">{{ info_message }}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()" aria-label="Dismiss">&times;</button>
+    </div>
+    {% elif warning_message %}
+    <div class="toast toast-warning" role="alert">
+        <span class="toast-icon">&#9888;</span>
+        <span class="toast-msg">{{ warning_message }}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()" aria-label="Dismiss">&times;</button>
+    </div>
+    {% endif %}
+</div>
+<script>
+(function() {
+    const container = document.getElementById('toast-container');
+    if (container) {
+        container.querySelectorAll('.toast').forEach(function(t) {
+            setTimeout(function() {
+                t.style.opacity = '0';
+                t.style.transform = 'translateX(120%)';
+                setTimeout(function() { t.remove(); }, 400);
+            }, 5000);
+        });
+    }
+})();
+</script>

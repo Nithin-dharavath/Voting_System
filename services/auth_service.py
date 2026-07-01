@@ -27,9 +27,12 @@ def get_jwt_secret() -> str:
     return JWT_SECRET_KEY
 
 
-def create_access_token(data: dict) -> str:
+def create_access_token(data: dict, remember_me: bool = False) -> str:
     payload = data.copy()
-    expire = datetime.now(UTC) + timedelta(hours=24)
+    if remember_me:
+        expire = datetime.now(UTC) + timedelta(days=30)
+    else:
+        expire = datetime.now(UTC) + timedelta(hours=1)
     payload.update({"exp": expire})
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGORITHM)
 
@@ -45,6 +48,29 @@ def generate_csrf_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+PASSWORD_MIN_LENGTH = 12
+
+
+def validate_password_strength(password: str) -> str | None:
+    import re
+
+    errors = []
+    if len(password) < PASSWORD_MIN_LENGTH:
+        errors.append(f"at least {PASSWORD_MIN_LENGTH} characters")
+    if not re.search(r"[A-Z]", password):
+        errors.append("an uppercase letter")
+    if not re.search(r"[a-z]", password):
+        errors.append("a lowercase letter")
+    if not re.search(r"\d", password):
+        errors.append("a digit")
+    if not re.search(r"[^a-zA-Z0-9]", password):
+        errors.append("a special character")
+    if errors:
+        missing = "; ".join(errors)
+        return f"Password must contain {missing}."
+    return None
+
+
 def register_user(
     full_name: str, email: str, password: str, department: str, academic_year: str
 ) -> dict:
@@ -53,8 +79,17 @@ def register_user(
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
         raise ValidationError("Invalid email format.")
 
-    if len(password) < 8:
-        raise ValidationError("Password must be at least 8 characters long.")
+    password_error = validate_password_strength(password)
+    if password_error:
+        raise ValidationError(password_error)
+
+    from services.breach_service import check_password_breached
+
+    breach_count = check_password_breached(password)
+    if breach_count and breach_count > 0:
+        raise ValidationError(
+            "This password has been exposed in a data breach. Please choose a different password."
+        )
 
     hashed_password = generate_password_hash(password)
 
@@ -72,7 +107,9 @@ def register_user(
     return {"message": "Registration successful! You can now login."}
 
 
-def authenticate_user(email: str, password: str, require_admin: bool = False) -> dict:
+def authenticate_user(
+    email: str, password: str, require_admin: bool = False, remember_me: bool = False
+) -> dict:
     import re
 
     if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
@@ -90,15 +127,29 @@ def authenticate_user(email: str, password: str, require_admin: bool = False) ->
     if require_admin and user["role"].upper() != "ADMIN":
         raise AuthError("Administrator access required.")
 
+    from services.breach_service import check_password_breached
+
+    breach_warning = None
+    try:
+        breach_count = check_password_breached(password)
+        if breach_count and breach_count > 0:
+            breach_warning = f"This password has been exposed {breach_count} times in data breaches. Consider changing it."
+    except Exception:
+        pass
+
     token = create_access_token(
         {
             "user_id": user["user_id"],
             "role": user["role"],
             "email": user["email"],
-        }
+        },
+        remember_me=remember_me,
     )
 
-    return {"token": token, "role": user["role"].upper()}
+    result = {"token": token, "role": user["role"].upper()}
+    if breach_warning:
+        result["breach_warning"] = breach_warning
+    return result
 
 
 def get_user_from_token(token: str | None) -> dict | None:

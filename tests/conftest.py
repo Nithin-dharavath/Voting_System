@@ -11,6 +11,16 @@ SERVICE_MODULES = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _disable_breach_check():
+    from config import settings
+
+    original = settings.breach_check_enabled
+    settings.breach_check_enabled = False
+    yield
+    settings.breach_check_enabled = original
+
+
 @pytest.fixture
 def mock_cursor():
     """Patches get_db_cursor in app + all service modules + database.connection.

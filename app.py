@@ -3,6 +3,8 @@ import os
 import time
 from datetime import UTC, datetime
 
+from typing import Optional
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -296,9 +298,14 @@ async def register_user(
 
 
 @app.post("/auth/login", tags=["Auth"])
-async def login_user(request: Request, email: str = Form(...), password: str = Form(...)):
+async def login_user(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    remember_me: Optional[str] = Form(None),
+):
     try:
-        result = auth_service.authenticate_user(email, password)
+        result = auth_service.authenticate_user(email, password, remember_me=remember_me == "true")
         response = RedirectResponse(
             url="/student/dashboard?login=success",
             status_code=303,
@@ -310,6 +317,11 @@ async def login_user(request: Request, email: str = Form(...), password: str = F
             samesite="lax",
             secure=True,
         )
+        breach_warning = result.get("breach_warning")
+        if breach_warning:
+            response.set_cookie(
+                key="breach_warning", value=breach_warning, httponly=False, samesite="lax"
+            )
         return response
     except AuthError as e:
         return templates.TemplateResponse(
@@ -327,9 +339,14 @@ async def login_user(request: Request, email: str = Form(...), password: str = F
 
 
 @app.post("/auth/admin-login", tags=["Auth"])
-async def admin_login_user(request: Request, email: str = Form(...), password: str = Form(...)):
+async def admin_login_user(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    remember_me: Optional[str] = Form(None),
+):
     try:
-        result = auth_service.authenticate_user(email, password, require_admin=True)
+        result = auth_service.authenticate_user(email, password, require_admin=True, remember_me=remember_me == "true")
         response = RedirectResponse(url="/admin/dashboard?login=success", status_code=303)
         response.set_cookie(
             key=auth_service.COOKIE_NAME,

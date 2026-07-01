@@ -2,21 +2,24 @@
     <div class="nav-container">
         <a href="/" class="nav-logo" aria-label="Voting System Home">Voting System</a>
         <div class="nav-links" role="menubar">
+            {% set current_path = request.url.path %}
             {% if request.state.user %}
-                <a href="{{ '/admin/dashboard' if request.state.user.role == 'ADMIN' else '/student/dashboard' }}" role="menuitem">Dashboard</a>
-                <a href="{{ '/admin/results' if request.state.user.role == 'ADMIN' else '/student/results' }}" class="nav-results-link" role="menuitem">
+                {% set dash_url = '/admin/dashboard' if request.state.user.role == 'ADMIN' else '/student/dashboard' %}
+                {% set results_url = '/admin/results' if request.state.user.role == 'ADMIN' else '/student/results' %}
+                <a href="{{ dash_url }}" class="{% if current_path == dash_url %}active-link{% endif %}" role="menuitem">Dashboard</a>
+                <a href="{{ results_url }}" class="nav-results-link {% if current_path == results_url %}active-link{% endif %}" role="menuitem">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
                     Results
                 </a>
-                <a href="/profile" role="menuitem">Profile</a>
+                <a href="/profile" class="{% if current_path == '/profile' %}active-link{% endif %}" role="menuitem">Profile</a>
                 <button id="nav-edit-profile-btn" class="nav-edit-btn hidden" onclick="toggleEditMode()" aria-label="Toggle edit mode">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 3l4 4-4 4"/><path d="M21 6H3"/><path d="M17 21l-4-4 4-4"/><path d="M3 18h18"/></svg>
                     Edit Profile
                 </button>
                 <a href="/auth/logout" class="btn-logout" role="menuitem">Logout</a>
             {% else %}
-                <a href="/login" role="menuitem">Login</a>
-                <a href="/register" class="btn-register" role="menuitem">Register</a>
+                <a href="/login" class="{% if current_path == '/login' %}active-link{% endif %}" role="menuitem">Login</a>
+                <a href="/register" class="btn-register {% if current_path == '/register' %}active-link{% endif %}" role="menuitem">Register</a>
             {% endif %}
         </div>
     </div>

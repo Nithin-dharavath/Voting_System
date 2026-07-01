@@ -207,29 +207,85 @@ button:hover {
     font-weight: 600 !important;
 }
 
-.toast {
+.toast-container {
     position: fixed;
-    top: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: var(--success-color);
-    color: white;
-    padding: 12px 24px;
-    border-radius: 12px;
-    font-weight: 600;
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-    z-index: 1000;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    top: 1rem;
+    right: 1rem;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 400px;
 }
 
-.toast.hidden {
-    opacity: 0;
-    transform: translate(-50%, -20px);
-    pointer-events: none;
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    font-weight: 500;
+    font-size: 0.875rem;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: toast-slide-in 0.4s ease-out;
 }
 
-.toast.error {
-    background-color: var(--error-color);
+@keyframes toast-slide-in {
+    from { opacity: 0; transform: translateX(120%); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.toast-success {
+    background-color: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.toast-error {
+    background-color: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+.toast-info {
+    background-color: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+}
+
+.toast-warning {
+    background-color: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+
+.toast-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.toast-msg {
+    flex: 1;
+    line-height: 1.4;
+}
+
+.toast-close {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    opacity: 0.6;
+    padding: 0;
+    width: auto;
+    color: inherit;
+    transition: opacity 0.2s;
+}
+
+.toast-close:hover {
+    opacity: 1;
+    transform: none;
 }
 
 /* Dashboard Styles */
@@ -1474,6 +1530,27 @@ button:hover {
     }
 }
 
+/* Checkbox Group */
+.checkbox-group {
+    display: flex;
+    align-items: center;
+}
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text-color);
+}
+.checkbox-label input[type="checkbox"] {
+    width: auto;
+    padding: 0;
+    accent-color: var(--accent-color);
+    cursor: pointer;
+}
+
 /* Password Strength Indicator */
 .password-strength {
     font-size: 0.75rem;
@@ -1484,6 +1561,56 @@ button:hover {
 .strength-weak { color: #ef4444; }
 .strength-medium { color: #f59e0b; }
 .strength-strong { color: #10b981; }
+
+.password-strength-container {
+    margin-top: 0.5rem;
+}
+.password-strength-bar {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 9999px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+.password-strength-bar-fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    width: 0;
+}
+.password-strength-bar-fill.strength-weak { background-color: #ef4444; }
+.password-strength-bar-fill.strength-medium { background-color: #f59e0b; }
+.password-strength-bar-fill.strength-strong { background-color: #10b981; }
+.password-checklist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.75rem;
+}
+.pwd-check-item {
+    padding: 0.2rem 0 0.2rem 1.25rem;
+    position: relative;
+    color: #94a3b8;
+    transition: color 0.2s;
+}
+.pwd-check-item::before {
+    content: '○';
+    position: absolute;
+    left: 0;
+    font-weight: 700;
+}
+.pwd-check-pass {
+    color: #10b981;
+}
+.pwd-check-pass::before {
+    content: '✓';
+}
+.pwd-check-fail {
+    color: #94a3b8;
+}
+.pwd-check-fail::before {
+    content: '○';
+}
 
 /* Field Error */
 .field-error {
@@ -1557,6 +1684,105 @@ textarea[aria-invalid="true"] {
     .admin-sidebar-toggle:hover {
         background: #f8fafc;
     }
+}
+
+/* Loading Spinner */
+.spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+.spinner-dark {
+    border-color: rgba(0,0,0,0.1);
+    border-top-color: var(--text-color);
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none !important;
+}
+button:disabled .btn-text {
+    margin-right: 0.5rem;
+}
+
+/* Breadcrumb */
+.breadcrumb-nav {
+    margin-bottom: 1rem;
+}
+.breadcrumb-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+}
+.breadcrumb-item {
+    display: inline-flex;
+}
+.breadcrumb-link {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+.breadcrumb-link:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+}
+.breadcrumb-current {
+    color: var(--color-admin-slate);
+    font-weight: 600;
+}
+.breadcrumb-sep {
+    color: #cbd5e1;
+    font-weight: 300;
+}
+
+/* Back to Top */
+.back-to-top {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    z-index: 900;
+    padding: 0;
+}
+.back-to-top.visible {
+    opacity: 1;
+    visibility: visible;
+}
+.back-to-top:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+
+/* Active Nav Link */
+.nav-links a.active-link {
+    color: var(--accent-color);
+    font-weight: 700;
 }
 
 /* Skip Link */

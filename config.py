@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     sentry_dsn: str | None = None
+    breach_check_enabled: bool = True
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

@@ -70,11 +70,12 @@ class TestAuthService:
         assert token1 != token2
 
     @patch("services.auth_service.get_db_cursor")
-    def test_register_user_success(self, mock_get_cursor):
+    @patch("services.breach_service.check_password_breached", return_value=None)
+    def test_register_user_success(self, mock_breach, mock_get_cursor):
         mock_get_cursor.return_value = _make_mock_cursor(None)
 
         result = auth_service.register_user(
-            "Test User", "test@example.com", "password123", "CS", "2024"
+            "Test User", "test@example.com", "StrongPass1!", "CS", "2024"
         )
         assert result["message"] == "Registration successful! You can now login."
 
@@ -84,14 +85,15 @@ class TestAuthService:
         )
 
     @patch("services.auth_service.get_db_cursor")
-    def test_register_user_duplicate_email(self, mock_get_cursor):
+    @patch("services.breach_service.check_password_breached", return_value=None)
+    def test_register_user_duplicate_email(self, mock_breach, mock_get_cursor):
         mock_get_cursor.return_value = _make_mock_cursor({"user_id": 1})
 
         with pytest.raises(ValidationError, match="Email already registered"):
-            auth_service.register_user("Test", "dup@example.com", "password123", "CS", "2024")
+            auth_service.register_user("Test", "dup@example.com", "StrongPass1!", "CS", "2024")
 
     def test_register_user_short_password(self):
-        with pytest.raises(ValidationError, match="Password must be at least 8 characters long"):
+        with pytest.raises(ValidationError, match="Password must contain"):
             auth_service.register_user("Test", "test@example.com", "short", "CS", "2024")
 
     @patch("services.auth_service.get_db_cursor")
