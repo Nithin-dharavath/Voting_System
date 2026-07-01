@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from database.connection import get_db_cursor
 from exceptions import ElectionError, NotFoundError, ValidationError
+from services.cache_service import cache_delete_prefix, cache_get, cache_set
 
 logger = logging.getLogger(__name__)
 
@@ -61,18 +62,26 @@ def get_election_by_id(election_id: int) -> dict | None:
         return election
 
 
-def get_all_elections() -> list[dict]:
+def get_all_elections(status_filter: str | None = None) -> list[dict]:
+    conditions = []
+    params: list = []
+    if status_filter:
+        conditions.append("status = %s")
+        params.append(status_filter.upper())
+    where_clause = " WHERE " + " AND ".join(conditions) if conditions else ""
     with get_db_cursor() as cursor:
         cursor.execute(
-            "SELECT id, title, description, start_time, end_time,"
-            " status, result_published FROM elections"
-            " ORDER BY created_at DESC"
+            f"SELECT id, title, description, start_time, end_time,"  # noqa: S608
+            f" status, result_published FROM elections{where_clause}"
+            f" ORDER BY created_at DESC",
+            tuple(params),
         )
         elections = cursor.fetchall()
         for e in elections:
             e["start_time"] = ensure_datetime(e["start_time"])
             e["end_time"] = ensure_datetime(e["end_time"])
-            e["status"] = compute_election_status(e["start_time"], e["end_time"])
+            if not status_filter:
+                e["status"] = compute_election_status(e["start_time"], e["end_time"])
         return elections
 
 
@@ -99,6 +108,33 @@ def get_active_elections_count() -> int:
         return cursor.fetchone()["count"]
 
 
+def get_ended_elections_paginated(page: int = 1, per_page: int = 10) -> tuple[list[dict], int]:
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM elections WHERE end_time <= NOW()",
+        )
+        total = cursor.fetchone()["count"]
+
+    offset = (page - 1) * per_page
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, title, description, start_time, end_time, status, result_published
+            FROM elections
+            WHERE end_time <= NOW()
+            ORDER BY end_time DESC
+            LIMIT %s OFFSET %s
+            """,
+            (per_page, offset),
+        )
+        elections = cursor.fetchall()
+        for e in elections:
+            e["start_time"] = ensure_datetime(e["start_time"])
+            e["end_time"] = ensure_datetime(e["end_time"])
+            e["status"] = compute_election_status(e["start_time"], e["end_time"])
+    return elections, total
+
+
 def get_ended_elections() -> list[dict]:
     with get_db_cursor() as cursor:
         cursor.execute(
@@ -115,6 +151,36 @@ def get_ended_elections() -> list[dict]:
             e["end_time"] = ensure_datetime(e["end_time"])
             e["status"] = compute_election_status(e["start_time"], e["end_time"])
         return elections
+
+
+def get_published_ended_elections_paginated(
+    page: int = 1, per_page: int = 10
+) -> tuple[list[dict], int]:
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM elections"
+            " WHERE end_time <= NOW() AND result_published = 1",
+        )
+        total = cursor.fetchone()["count"]
+
+    offset = (page - 1) * per_page
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, title, description, start_time, end_time, status, result_published
+            FROM elections
+            WHERE end_time <= NOW() AND result_published = 1
+            ORDER BY end_time DESC
+            LIMIT %s OFFSET %s
+            """,
+            (per_page, offset),
+        )
+        elections = cursor.fetchall()
+        for e in elections:
+            e["start_time"] = ensure_datetime(e["start_time"])
+            e["end_time"] = ensure_datetime(e["end_time"])
+            e["status"] = compute_election_status(e["start_time"], e["end_time"])
+    return elections, total
 
 
 def get_published_ended_elections() -> list[dict]:
@@ -155,6 +221,7 @@ def create_election(
             " VALUES (%s, %s, %s, %s, %s, %s)"
         )
         cursor.execute(query, (title, description, s_time, e_time, status, created_by))
+    cache_delete_prefix("dashboard:")
 
 
 def update_election(
@@ -177,11 +244,17 @@ def update_election(
             " WHERE id = %s"
         )
         cursor.execute(query, (title, description, s_time, e_time, status, election_id))
+    cache_delete_prefix("dashboard:")
 
 
 def delete_election(election_id: int):
     with get_db_cursor() as cursor:
+        cursor.execute("DELETE FROM vote_verifications WHERE election_id = %s", (election_id,))
+        cursor.execute("DELETE FROM votes WHERE election_id = %s", (election_id,))
+        cursor.execute("DELETE FROM voting_sessions WHERE election_id = %s", (election_id,))
+        cursor.execute("DELETE FROM candidate_applications WHERE election_id = %s", (election_id,))
         cursor.execute("DELETE FROM elections WHERE id = %s", (election_id,))
+    cache_delete_prefix("dashboard:")
 
 
 def get_election_results(election_id: int) -> tuple[list[dict], int]:
@@ -223,13 +296,61 @@ def publish_results(election_id: int):
             cursor.execute(
                 "UPDATE elections SET result_published = 1 WHERE id = %s", (election_id,)
             )
+        cache_delete_prefix("dashboard:")
+
+
+def get_elections_results_batch(election_ids: list[int]) -> dict[int, tuple[list[dict], int]]:
+    if not election_ids:
+        return {}
+    placeholders = ",".join(["%s"] * len(election_ids))
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT ca.election_id,
+                   ca.id           AS candidate_application_id,
+                   u.full_name     AS candidate_name,
+                   u.department    AS department,
+                   u.academic_year AS academic_year,
+                   ca.manifesto    AS manifesto,
+                   COUNT(v.candidate_id) AS vote_count
+            FROM candidate_applications ca
+            JOIN users u ON ca.user_id = u.user_id
+            LEFT JOIN votes v
+                ON v.candidate_id = ca.id AND v.election_id = ca.election_id
+            WHERE ca.election_id IN ({placeholders}) AND ca.approval_status = 'APPROVED'
+            GROUP BY ca.election_id, ca.id, u.full_name, u.department, u.academic_year, ca.manifesto
+            ORDER BY ca.election_id, vote_count DESC, u.full_name ASC
+            """,  # noqa: S608
+            tuple(election_ids),
+        )
+        rows = cursor.fetchall()
+
+    result_map: dict[int, list[dict]] = {}
+    for r in rows:
+        eid = r["election_id"]
+        if eid not in result_map:
+            result_map[eid] = []
+        result_map[eid].append(r)
+
+    output: dict[int, tuple[list[dict], int]] = {}
+    for eid in election_ids:
+        results = result_map.get(eid, [])
+        total = sum(r["vote_count"] for r in results)
+        for r in results:
+            r["percentage"] = (r["vote_count"] / total * 100) if total else 0.0
+        output[eid] = (results, total)
+    return output
 
 
 def get_elections_with_results() -> list[dict]:
     elections = get_ended_elections()
+    if not elections:
+        return []
+    ids = [e["id"] for e in elections]
+    batch = get_elections_results_batch(ids)
     election_results = []
     for election in elections:
-        results, total_votes = get_election_results(election["id"])
+        results, total_votes = batch.get(election["id"], ([], 0))
         election_results.append(
             {
                 "election": election,
@@ -240,10 +361,16 @@ def get_elections_with_results() -> list[dict]:
     return election_results
 
 
-def get_dashboard_stats() -> dict:
+def get_dashboard_stats(use_cache: bool = True) -> dict:
     import logging
 
     logger = logging.getLogger(__name__)
+    cache_key = "dashboard:stats"
+    if use_cache:
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return cached
+
     stats = {
         "total_students": 0,
         "total_elections": 0,
@@ -256,72 +383,110 @@ def get_dashboard_stats() -> dict:
         with get_db_cursor() as cursor:
             cursor.execute("SELECT COUNT(*) as count FROM users WHERE role = 'STUDENT'")
             stats["total_students"] = cursor.fetchone()["count"]
-    except Exception:
-        logger.exception("Failed to get student count")
 
-    try:
-        with get_db_cursor() as cursor:
             cursor.execute("SELECT COUNT(*) as count FROM elections")
             stats["total_elections"] = cursor.fetchone()["count"]
-    except Exception:
-        logger.exception("Failed to get election count")
 
-    try:
-        with get_db_cursor() as cursor:
             cursor.execute(
                 "SELECT COUNT(*) as count FROM elections"
                 " WHERE start_time <= NOW() AND end_time > NOW()"
             )
             stats["active_elections"] = cursor.fetchone()["count"]
-    except Exception:
-        logger.exception("Failed to get active election count")
 
-    try:
-        with get_db_cursor() as cursor:
             cursor.execute("SELECT COUNT(*) as count FROM votes")
             stats["total_votes"] = cursor.fetchone()["count"]
-    except Exception:
-        logger.exception("Failed to get vote count")
 
-    try:
-        with get_db_cursor() as cursor:
             cursor.execute(
                 "SELECT COUNT(*) as count FROM candidate_applications"
                 " WHERE approval_status = 'PENDING'"
             )
             stats["pending_apps"] = cursor.fetchone()["count"]
     except Exception:
-        logger.exception("Failed to get pending apps count")
+        logger.exception("Failed to get dashboard stats")
 
     if stats["total_students"] > 0:
         stats["turnout_percentage"] = round(
             (stats["total_votes"] / stats["total_students"]) * 100, 1
         )
 
+    if use_cache:
+        cache_set(cache_key, stats, ttl=60)
     return stats
 
 
-def get_vote_trend(days: int = 7) -> list[dict]:
+def get_vote_trend(days: int = 7, use_cache: bool = True) -> list[dict]:
     import logging
     from datetime import UTC, datetime, timedelta
 
     logger = logging.getLogger(__name__)
-    trend = []
+    cache_key = f"dashboard:vote_trend:{days}"
+    if use_cache:
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return cached
+
     today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    start_date = today - timedelta(days=days - 1)
     try:
         with get_db_cursor() as cursor:
-            for i in range(days - 1, -1, -1):
-                day = today - timedelta(days=i)
-                next_day = day + timedelta(days=1)
-                cursor.execute(
-                    "SELECT COUNT(*) as count FROM votes WHERE voted_at >= %s AND voted_at < %s",
-                    (day, next_day),
-                )
-                count = cursor.fetchone()["count"]
-                trend.append({"date": day.strftime("%Y-%m-%d"), "votes": count})
+            cursor.execute(
+                """
+                SELECT DATE(voted_at) AS vote_date, COUNT(*) AS count
+                FROM votes
+                WHERE voted_at >= %s AND voted_at < %s
+                GROUP BY DATE(voted_at)
+                ORDER BY vote_date ASC
+                """,
+                (start_date, today + timedelta(days=1)),
+            )
+            db_rows = cursor.fetchall()
+            rows: dict = {}
+            for r in db_rows:
+                vd = r["vote_date"]
+                if hasattr(vd, "strftime"):
+                    key = vd.strftime("%Y-%m-%d")
+                else:
+                    key = str(vd)
+                rows[key] = r["count"]
     except Exception:
         logger.exception("Failed to get vote trend")
+        rows = {}
+
+    trend = []
+    for i in range(days):
+        day = start_date + timedelta(days=i)
+        date_str = day.strftime("%Y-%m-%d")
+        trend.append({"date": date_str, "votes": rows.get(date_str, 0)})
+
+    if use_cache:
+        cache_set(cache_key, trend, ttl=300)
     return trend
+
+
+def get_elections_by_status_paginated(
+    status: str, page: int = 1, per_page: int = 10
+) -> tuple[list[dict], int]:
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM elections WHERE status = %s",
+            (status,),
+        )
+        total = cursor.fetchone()["count"]
+
+    offset = (page - 1) * per_page
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            "SELECT id, title, description, start_time, end_time,"
+            " status, result_published FROM elections"
+            " WHERE status = %s"
+            " ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            (status, per_page, offset),
+        )
+        elections = cursor.fetchall()
+        for e in elections:
+            e["start_time"] = ensure_datetime(e["start_time"])
+            e["end_time"] = ensure_datetime(e["end_time"])
+    return elections, total
 
 
 def get_elections_paginated(
@@ -392,6 +557,7 @@ def bulk_delete_elections(election_ids: list[int]):
             f"DELETE FROM elections WHERE id IN ({placeholders})",  # noqa: S608
             tuple(election_ids),
         )
+    cache_delete_prefix("dashboard:")
 
 
 def bulk_publish_results(election_ids: list[int]):
@@ -404,12 +570,19 @@ def bulk_publish_results(election_ids: list[int]):
             f" AND end_time <= NOW()",
             tuple(election_ids),
         )
+    cache_delete_prefix("dashboard:")
 
 
-def get_recent_activity(limit: int = 20) -> list[dict]:
+def get_recent_activity(limit: int = 20, use_cache: bool = True) -> list[dict]:
     import logging
 
     logger = logging.getLogger(__name__)
+    cache_key = f"dashboard:recent_activity:{limit}"
+    if use_cache:
+        cached = cache_get(cache_key)
+        if cached is not None:
+            return cached
+
     try:
         with get_db_cursor() as cursor:
             cursor.execute(
@@ -432,7 +605,17 @@ def get_recent_activity(limit: int = 20) -> list[dict]:
                 """,
                 (limit, limit, limit, limit),
             )
-            return cursor.fetchall()
+            result = cursor.fetchall()
     except Exception:
         logger.exception("Failed to get recent activity")
-        return []
+        result = []
+
+    from datetime import datetime
+
+    for row in result:
+        if isinstance(row.get("acted_at"), datetime):
+            row["acted_at"] = row["acted_at"].strftime("%Y-%m-%d %H:%M")
+
+    if use_cache:
+        cache_set(cache_key, result, ttl=60)
+    return result

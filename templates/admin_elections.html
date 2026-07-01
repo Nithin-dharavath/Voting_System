@@ -47,6 +47,9 @@
             {% if success_message %}
             <div class="alert alert-success">{{ success_message }}</div>
             {% endif %}
+            {% if error_message %}
+            <div class="alert alert-error">{{ error_message }}</div>
+            {% endif %}
 
             <form id="bulk-election-form" method="POST" action="/admin/elections/bulk-action">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

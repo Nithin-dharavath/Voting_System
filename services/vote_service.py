@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from database.connection import get_db_cursor
 from exceptions import ElectionError, VoteError
+from services.cache_service import cache_delete_prefix
 from services.candidate_service import get_approved_candidate_for_vote
 from services.election_service import ensure_datetime, get_election_by_id
 
@@ -139,4 +140,5 @@ def submit_vote_with_verification(
         logger.exception("Verification transaction failed")
         raise VoteError("An internal error occurred during verification. Please try again.") from e
 
+    cache_delete_prefix("dashboard:")
     return {"message": "Your vote has been recorded."}

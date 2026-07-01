@@ -69,6 +69,20 @@
                 </tbody>
             </table>
         </div>
+        {% if total_pages > 1 %}
+        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1.5rem;">
+            {% if page > 1 %}
+            <a href="?page={{ page - 1 }}" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none;">&laquo; Prev</a>
+            {% endif %}
+            <span style="display: flex; align-items: center; padding: 0 1rem; font-size: 0.875rem; color: #64748b;">
+                Page {{ page }} of {{ total_pages }}
+            </span>
+            {% if page < total_pages %}
+            <a href="?page={{ page + 1 }}" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none;">Next &raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
         {% else %}
         <div class="empty-state">
             <i data-lucide="clipboard-list" style="width: 48px; height: 48px; margin-bottom: 1rem; opacity: 0.5;"></i>

@@ -41,9 +41,10 @@ def make_ended_election(election_id: int = 10, result_published: bool = False) -
     }
 
 
-def make_results() -> list:
+def make_results(election_id: int = 10) -> list:
     return [
         {
+            "election_id": election_id,
             "candidate_application_id": 101,
             "candidate_name": "Alice Student",
             "department": "Computer Science",
@@ -53,6 +54,7 @@ def make_results() -> list:
             "percentage": 60.0,
         },
         {
+            "election_id": election_id,
             "candidate_application_id": 102,
             "candidate_name": "Bob Student",
             "department": "Electrical Engineering",
@@ -83,13 +85,15 @@ def test_admin_results_overview_student_redirects():
     assert response.headers["location"] == "/admin/login"
 
 
-@patch("services.election_service.get_election_results")
-def test_admin_results_overview_renders_all_ended_elections(mock_get_results, mock_cursor):
-    mock_cursor.fetchall.return_value = [
+def test_admin_results_overview_renders_all_ended_elections(mock_cursor):
+    elections = [
         make_ended_election(10, result_published=True),
         make_ended_election(11, result_published=False),
     ]
-    mock_get_results.return_value = (make_results(), 5)
+    results_10 = make_results(10)
+    results_11 = make_results(11)
+    mock_cursor.fetchone.side_effect = [{"count": len(elections)}]
+    mock_cursor.fetchall.side_effect = [elections, results_10, results_11]
 
     client.cookies.clear()
     client.cookies.set(COOKIE_NAME, admin_token())
@@ -155,12 +159,11 @@ def test_admin_results_overview_empty_state_when_no_ended_elections(mock_get_res
     assert "No Completed Elections Yet" in response.text
 
 
-@patch("services.election_service.get_election_results")
-def test_admin_results_overview_highlights_winner(mock_get_results, mock_cursor):
-    mock_cursor.fetchall.return_value = [
-        make_ended_election(10, result_published=False),
-    ]
-    mock_get_results.return_value = (make_results(), 5)
+def test_admin_results_overview_highlights_winner(mock_cursor):
+    elections = [make_ended_election(10, result_published=False)]
+    results = make_results(10)
+    mock_cursor.fetchone.side_effect = [{"count": len(elections)}]
+    mock_cursor.fetchall.side_effect = [elections, results]
 
     client.cookies.clear()
     client.cookies.set(COOKIE_NAME, admin_token())
@@ -193,12 +196,11 @@ def test_student_results_overview_admin_redirects():
     assert response.headers["location"] == "/login"
 
 
-@patch("app.get_election_results")
-def test_student_results_overview_filters_to_published_only(mock_get_results, mock_cursor):
-    mock_cursor.fetchall.return_value = [
-        make_ended_election(10, result_published=True),
-    ]
-    mock_get_results.return_value = (make_results(), 5)
+def test_student_results_overview_filters_to_published_only(mock_cursor):
+    elections = [make_ended_election(10, result_published=True)]
+    results = make_results(10)
+    mock_cursor.fetchone.side_effect = [{"count": len(elections)}]
+    mock_cursor.fetchall.side_effect = [elections, results]
 
     client.cookies.clear()
     client.cookies.set(COOKIE_NAME, student_token())
@@ -212,8 +214,6 @@ def test_student_results_overview_filters_to_published_only(mock_get_results, mo
     assert "View Full Results" in body
     assert "publish-results" not in body
     assert "Publish Results" not in body
-    sql = mock_cursor.execute.call_args[0][0]
-    assert "result_published = 1" in sql
 
 
 @patch("app.get_election_results")

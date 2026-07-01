@@ -9,64 +9,56 @@
         <p>Discover and participate in active and upcoming elections.</p>
     </div>
 
+    <div class="status-tabs-container" style="margin-bottom: 1.5rem;">
+        <div class="status-tabs">
+            <a href="/student/elections?tab=active" class="tab-item {% if tab == 'active' %}active{% endif %}">Active</a>
+            <a href="/student/elections?tab=upcoming" class="tab-item {% if tab == 'upcoming' %}active{% endif %}">Upcoming</a>
+            <a href="/student/elections?tab=ended" class="tab-item {% if tab == 'ended' %}active{% endif %}">Ended</a>
+        </div>
+    </div>
+
     <div class="elections-container">
-        {% if active %}
+        {% if elections %}
         <section class="election-section">
-            <h2 class="section-title active">Active Elections</h2>
             <div class="election-grid">
-                {% for election in active %}
+                {% for election in elections %}
                 <div class="election-card">
                     <h3>{{ election.title }}</h3>
                     <p class="election-desc">{{ election.description }}</p>
                     <div class="election-meta">
+                        {% if tab == 'active' %}
                         <span>📅 Ends: {{ election.end_time.strftime('%Y-%m-%d %H:%M') if election.end_time else 'N/A' }}</span>
-                    </div>
-                    <a href="/student/elections/{{ election.id }}" class="btn-vote">Vote Now</a>
-                </div>
-                {% endfor %}
-            </div>
-        </section>
-        {% endif %}
-
-        {% if upcoming %}
-        <section class="election-section">
-            <h2 class="section-title upcoming">Upcoming Elections</h2>
-            <div class="election-grid">
-                {% for election in upcoming %}
-                <div class="election-card">
-                    <h3>{{ election.title }}</h3>
-                    <p class="election-desc">{{ election.description }}</p>
-                    <div class="election-meta">
+                        {% elif tab == 'upcoming' %}
                         <span>🚀 Starts: {{ election.start_time.strftime('%Y-%m-%d %H:%M') if election.start_time else 'N/A' }}</span>
-                    </div>
-                    <a href="/student/elections/{{ election.id }}" class="btn-details">View Details</a>
-                </div>
-                {% endfor %}
-            </div>
-        </section>
-        {% endif %}
-
-        {% if ended %}
-        <section class="election-section">
-            <h2 class="section-title ended">Past Elections</h2>
-            <div class="election-grid">
-                {% for election in ended %}
-                <div class="election-card">
-                    <h3>{{ election.title }}</h3>
-                    <p class="election-desc">{{ election.description }}</p>
-                    <div class="election-meta">
+                        {% else %}
                         <span>🏁 Ended: {{ election.end_time.strftime('%Y-%m-%d %H:%M') if election.end_time else 'N/A' }}</span>
+                        {% endif %}
                     </div>
-                    <a href="/student/elections/{{ election.id }}" class="btn-details">View Results</a>
+                    <a href="/student/elections/{{ election.id }}" class="btn-vote">
+                        {% if tab == 'active' %}Vote Now{% else %}View Details{% endif %}
+                    </a>
                 </div>
                 {% endfor %}
             </div>
         </section>
+
+        {% if total_pages > 1 %}
+        <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 1.5rem;">
+            {% if page > 1 %}
+            <a href="?tab={{ tab }}&page={{ page - 1 }}" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none;">&laquo; Prev</a>
+            {% endif %}
+            <span style="display: flex; align-items: center; padding: 0 1rem; font-size: 0.875rem; color: #64748b;">
+                Page {{ page }} of {{ total_pages }}
+            </span>
+            {% if page < total_pages %}
+            <a href="?tab={{ tab }}&page={{ page + 1 }}" class="btn-secondary" style="padding: 0.5rem 1rem; text-decoration: none;">Next &raquo;</a>
+            {% endif %}
+        </div>
         {% endif %}
 
-        {% if not active and not upcoming and not ended %}
+        {% else %}
         <div class="no-elections">
-            <p>No elections available at the moment.</p>
+            <p>No {{ tab }} elections available at the moment.</p>
         </div>
         {% endif %}
     </div>

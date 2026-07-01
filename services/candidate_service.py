@@ -2,6 +2,7 @@ import logging
 
 from database.connection import get_db_cursor
 from exceptions import ValidationError
+from services.cache_service import cache_delete_prefix
 from services.election_service import format_datetime_simple, get_election_by_id
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,35 @@ def get_election_candidates(election_id: int) -> list[dict]:
         return applications
 
 
+def get_election_candidates_paginated(
+    election_id: int, page: int = 1, per_page: int = 20
+) -> tuple[list[dict], int]:
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) as count FROM candidate_applications WHERE election_id = %s",
+            (election_id,),
+        )
+        total = cursor.fetchone()["count"]
+
+    offset = (page - 1) * per_page
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT ca.*, u.full_name as applicant_name
+            FROM candidate_applications ca
+            JOIN users u ON ca.user_id = u.user_id
+            WHERE ca.election_id = %s
+            ORDER BY ca.applied_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            (election_id, per_page, offset),
+        )
+        applications = cursor.fetchall()
+        for app in applications:
+            app["applied_at"] = format_datetime_simple(app["applied_at"])
+    return applications, total
+
+
 def update_candidate_status(application_id: int, action: str, reviewed_by: int):
     if action not in ("approve", "reject"):
         raise ValidationError("Invalid action. Must be 'approve' or 'reject'.")
@@ -118,6 +148,7 @@ def update_candidate_status(application_id: int, action: str, reviewed_by: int):
             "UPDATE candidate_applications SET approval_status = %s, reviewed_by = %s WHERE id = %s"
         )
         cursor.execute(query, (status, reviewed_by, application_id))
+    cache_delete_prefix("dashboard:")
 
 
 def get_approved_candidates_for_election(election_id: int) -> list[dict]:
@@ -156,6 +187,62 @@ def get_approved_candidate_for_vote(candidate_application_id: int, election_id: 
         return cursor.fetchone()
 
 
+def get_applications_by_status_paginated(
+    status: str,
+    page: int = 1,
+    per_page: int = 20,
+    sort: str = "date",
+    order: str = "ASC",
+    category: str | None = None,
+) -> tuple[list[dict], int]:
+    valid_statuses = {"PENDING", "APPROVED", "REJECTED"}
+    status = status.upper()
+    if status not in valid_statuses:
+        status = "PENDING"
+
+    order = order.upper()
+    if order not in ["ASC", "DESC"]:
+        order = "ASC"
+
+    sort_mapping = {"date": "ca.applied_at", "name": "u.full_name", "election": "e.title"}
+    sort_field = sort_mapping.get(sort, "ca.applied_at")
+
+    conditions = ["ca.approval_status = %s"]
+    params: list = [status]
+
+    if category:
+        conditions.append("u.department = %s")
+        params.append(category)
+
+    where_clause = " WHERE " + " AND ".join(conditions)
+    count_query = (
+        "SELECT COUNT(*) as count FROM candidate_applications ca"
+        f" JOIN users u ON ca.user_id = u.user_id{where_clause}"
+    )
+
+    with get_db_cursor() as cursor:
+        cursor.execute(count_query, tuple(params))
+        total = cursor.fetchone()["count"]
+
+    offset = (page - 1) * per_page
+    data_query = (
+        "SELECT ca.*, u.full_name as applicant_name, u.department, e.title as election_title"
+        " FROM candidate_applications ca"
+        " JOIN users u ON ca.user_id = u.user_id"
+        " JOIN elections e ON ca.election_id = e.id"
+        f"{where_clause}"
+        f" ORDER BY {sort_field} {order}"
+        " LIMIT %s OFFSET %s"
+    )
+    params.extend([per_page, offset])
+    with get_db_cursor() as cursor:
+        cursor.execute(data_query, tuple(params))
+        applications = cursor.fetchall()
+        for app in applications:
+            app["applied_at"] = format_datetime_simple(app["applied_at"])
+    return applications, total
+
+
 def get_pending_count() -> int:
     with get_db_cursor() as cursor:
         cursor.execute(
@@ -177,6 +264,7 @@ def bulk_update_candidate_status(ids: list[int], action: str, reviewed_by: int):
             f" WHERE id IN ({placeholders})",
             (status, reviewed_by, *ids),
         )
+    cache_delete_prefix("dashboard:")
 
 
 def get_student_candidacy_status(user_id: int) -> str | None:
