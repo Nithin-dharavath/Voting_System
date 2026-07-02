@@ -45,14 +45,14 @@ The next branch is chosen from this ordered task list:
 Current branch **must** be:
 
 ```text
-feature/<task-id-with-dashes>-<task-title-slug>
+feature/<task-title-slug>
 ```
 
 Examples:
 
-* `feature/1-2-add-security-headers-middleware`
-* `feature/1-3-add-s3-upload-support`
-* `feature/2-6-ec2-instance`
+* `feature/add-s3-upload-support`
+* `feature/harden-cors-for-production`
+* `feature/multi-stage-docker-build`
 
 ## Step 1 — Detect branches
 
@@ -82,7 +82,8 @@ feature/<task-id-with-dashes>-<task-title-slug>
 feature/<task-title-slug>
 ```
 
-Extract the task ID from the branch name:
+Extract the title slug from the branch name (everything after `feature/`).
+Find the matching roadmap task by slug-matching each roadmap title:
 
 * `feature/1-2-add-security-headers-middleware` → `CURRENT_TASK_ID=1.2`
 * `feature/2-6-ec2-instance` → `CURRENT_TASK_ID=2.6`
@@ -90,7 +91,13 @@ Extract the task ID from the branch name:
 
 **If the branch has a task ID prefix** (e.g. `1-2-`), parse `CURRENT_TASK_ID` from it directly.
 
-**If the branch has no task ID prefix**, extract the slug from `feature/<slug>` and find the matching roadmap entry by converting each roadmap title to kebab-case and comparing. The first match sets `CURRENT_TASK_ID`. If no match is found, stop with:
+**If the branch has no task ID prefix**, extract the slug from `feature/<slug>` and find the matching roadmap entry by converting each roadmap title to kebab-case and comparing:
+1. Take a roadmap title (e.g. `Add S3 upload support`)
+2. Lowercase it → `add s3 upload support`
+3. Replace spaces with hyphens → `add-s3-upload-support`
+4. Compare to the extracted slug
+
+The first match sets `CURRENT_TASK_ID`. If no match is found, stop with:
 
 ```text
 Could not match branch slug "<slug>" to any roadmap entry.
@@ -317,13 +324,13 @@ If there is no next task, do not create a branch. Report:
 If a next task exists, generate:
 
 ```text
-feature/<next-task-id-with-dashes>-<next-task-title-kebab-case>
+feature/<next-task-title-kebab-case>
 ```
 
 Examples:
 
-* `1.3` + `Add S3 upload support` → `feature/1-3-add-s3-upload-support`
-* `2.6` + `EC2 Instance` → `feature/2-6-ec2-instance`
+* `1.3` + `Add S3 upload support` → `feature/add-s3-upload-support`
+* `2.6` + `EC2 Instance` → `feature/ec2-instance`
 
 Store it as `NEXT_BRANCH`.
 
