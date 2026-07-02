@@ -75,22 +75,34 @@ Switch to a roadmap feature branch before running /ship-feature.
 
 ## Step 2 — Validate roadmap branch and extract current task
 
-`CURRENT_BRANCH` must match:
+`CURRENT_BRANCH` must match one of:
 
 ```text
 feature/<task-id-with-dashes>-<task-title-slug>
+feature/<task-title-slug>
 ```
 
 Extract the task ID from the branch name:
 
 * `feature/1-2-add-security-headers-middleware` → `CURRENT_TASK_ID=1.2`
 * `feature/2-6-ec2-instance` → `CURRENT_TASK_ID=2.6`
+* `feature/harden-cors-for-production` → look up slug `harden-cors-for-production` against roadmap titles
 
-If the branch format is invalid, stop and say:
+**If the branch has a task ID prefix** (e.g. `1-2-`), parse `CURRENT_TASK_ID` from it directly.
+
+**If the branch has no task ID prefix**, extract the slug from `feature/<slug>` and find the matching roadmap entry by converting each roadmap title to kebab-case and comparing. The first match sets `CURRENT_TASK_ID`. If no match is found, stop with:
+
+```text
+Could not match branch slug "<slug>" to any roadmap entry.
+Available tasks: feature/<task-id>-<task-title-slug>
+```
+
+If the branch does not start with `feature/`, stop and say:
 
 ```text
 Current branch does not match the roadmap branch format.
-Rename it like: feature/1-2-add-security-headers-middleware
+Use: feature/<task-id-with-dashes>-<task-title-slug>
+Or:  feature/<task-title-slug>
 Then run /ship-feature again.
 ```
 
