@@ -1,12 +1,62 @@
 ---
 
-description: Commit, push, create PR, merge, and clean up after a feature is complete
+description: Commit, push, create PR, merge, clean up, and create the next roadmap branch automatically
 allowed-tools: Read, Bash, mcp__github__create_pull_request, mcp__github__merge_pull_request, mcp__github__delete_branch
 ------------------------------------------------------------------------------------------------------------------------
 
-## Step 1 — Identify the default and current branch
+# /ship-feature
 
-Determine the repository's default branch (`main`, `master`, or another configured default) and store it as `DEFAULT_BRANCH`.
+Ships the current roadmap feature branch, merges it, deletes it, then creates the **next roadmap branch** automatically.
+
+## Roadmap order
+
+The next branch is chosen from this ordered task list:
+
+* `1.1` Enforce JWT_SECRET in production
+* `1.2` Add security headers middleware
+* `1.3` Add S3 upload support
+* `1.4` Harden CORS for production
+* `1.5` Multi-stage Docker build
+* `1.6` Production docker-compose
+* `1.7` Nginx reverse proxy config
+* `1.8` EC2 user-data script
+* `1.9` Update env templates
+* `1.10` Local verification
+* `2.1` RDS MySQL Instance
+* `2.2` S3 Bucket
+* `2.3` IAM Role for EC2
+* `2.4` ECR Repository
+* `2.5` Security Group for EC2
+* `2.6` EC2 Instance
+* `2.7` Elastic IP
+* `2.8` Secrets Manager
+* `3.1` Extend GitHub Actions workflow
+* `3.2` Add GitHub Secrets
+* `3.3` Test the pipeline
+* `4.1` Push code trigger
+* `4.2` SSH into EC2
+* `4.3` Run database migrations
+* `4.4` Seed database
+* `4.5` Initial SSL certificate
+* `4.6` End-to-end functional test
+
+## Branch format
+
+Current branch **must** be:
+
+```text
+feature/<task-id-with-dashes>-<task-title-slug>
+```
+
+Examples:
+
+* `feature/1-2-add-security-headers-middleware`
+* `feature/1-3-add-s3-upload-support`
+* `feature/2-6-ec2-instance`
+
+## Step 1 — Detect branches
+
+Determine the repository default branch and store it as `DEFAULT_BRANCH`.
 
 Run:
 
@@ -14,16 +64,37 @@ Run:
 git branch --show-current
 ```
 
-Store this as `CURRENT_BRANCH`.
+Store it as `CURRENT_BRANCH` and also `OLD_FEATURE_BRANCH`.
 
-If `CURRENT_BRANCH` is `DEFAULT_BRANCH`, stop and say:
+If `CURRENT_BRANCH` is the default branch, stop and say:
 
 ```text
 You're currently on the default branch.
-Create a feature branch before running /ship-feature.
+Switch to a roadmap feature branch before running /ship-feature.
 ```
 
-## Step 2 — Generate commit message
+## Step 2 — Validate roadmap branch and extract current task
+
+`CURRENT_BRANCH` must match:
+
+```text
+feature/<task-id-with-dashes>-<task-title-slug>
+```
+
+Extract the task ID from the branch name:
+
+* `feature/1-2-add-security-headers-middleware` → `CURRENT_TASK_ID=1.2`
+* `feature/2-6-ec2-instance` → `CURRENT_TASK_ID=2.6`
+
+If the branch format is invalid, stop and say:
+
+```text
+Current branch does not match the roadmap branch format.
+Rename it like: feature/1-2-add-security-headers-middleware
+Then run /ship-feature again.
+```
+
+## Step 3 — Generate commit message
 
 Run:
 
@@ -33,48 +104,34 @@ git diff
 git log DEFAULT_BRANCH..HEAD --oneline
 ```
 
-If a matching spec exists in `.claude/specs/`, use it to understand the completed feature.
+If a matching spec exists in `.claude/specs/`, use it. If not, infer the feature from the code changes and commit history.
 
-If no spec exists:
+Generate a Conventional Commit message using one of:
 
-* Infer the feature from the Git diff, commit history, project structure, and source code.
-* Never stop because a spec is missing.
-
-Generate a Conventional Commit message:
-
-* feat: new feature
-* fix: bug fix
-* chore: config or tooling
-* docs: documentation only
-* refactor: internal improvements
-* test: tests only
-* perf: performance improvements
+* `feat:`
+* `fix:`
+* `chore:`
+* `docs:`
+* `refactor:`
+* `test:`
+* `perf:`
 
 Rules:
 
-* Lowercase
-* No period at the end
-* Under 72 characters
-* Describes what the user can now do, not what the code does
+* lowercase
+* no period at the end
+* under 72 characters
+* describe what the user can now do, not what the code does
 
-Good:
+Also generate `PR_TITLE` as plain English without the Conventional Commit prefix.
 
-```text
-feat: add delete expense button with confirmation dialog
-```
-
-Bad:
-
-```text
-feat: added DELETE route to app.py
-```
-
-## Step 3 — Commit
+## Step 4 — Commit
 
 Run:
 
 ```bash
 git add .
+git status --short
 ```
 
 If there are no changes to commit, stop and say:
@@ -84,19 +141,19 @@ No changes detected.
 Nothing to commit.
 ```
 
-Otherwise:
+Otherwise run:
 
 ```bash
-git commit -m "<generated-message>"
+git commit -m "<COMMIT_MESSAGE>"
 ```
 
 Report:
 
 ```text
-✓ Committed — <message>
+✓ Committed — <COMMIT_MESSAGE>
 ```
 
-## Step 4 — Push to feature branch
+## Step 5 — Push
 
 Run:
 
@@ -116,7 +173,7 @@ Report:
 ✓ Pushed — CURRENT_BRANCH
 ```
 
-## Step 5 — Create PR via GitHub MCP
+## Step 6 — Create or reuse PR
 
 If GitHub MCP is not connected, stop and say:
 
@@ -124,55 +181,39 @@ If GitHub MCP is not connected, stop and say:
 GitHub MCP is not connected. Run /mcp to check connection.
 ```
 
-If a Pull Request already exists for `CURRENT_BRANCH`, reuse it.
+If a PR already exists for `CURRENT_BRANCH`, reuse it. Otherwise create one from `CURRENT_BRANCH` into `DEFAULT_BRANCH`.
 
-Otherwise create a Pull Request from `CURRENT_BRANCH` into `DEFAULT_BRANCH`.
+Use `PR_TITLE` as the title.
 
-Title:
-
-Plain English feature name.
-
-Do not include the Conventional Commit prefix.
-
-Example:
-
-```text
-Add delete expense functionality
-```
-
-### If a spec exists
-
-Description:
+### PR body if a spec exists
 
 ```markdown
 ## What this PR does
 <one paragraph from the spec overview>
 
 ## Changes
-<bullet list of every file changed with one line description each>
+<bullet list of changed files with one-line descriptions>
 
 ## Definition of done
-<copy the checklist from the spec and mark every completed item as [x]>
+<spec checklist with completed items marked [x]>
 
 ## How to test
 <testing steps from the spec>
 ```
 
-### If no spec exists
-
-Generate:
+### PR body if no spec exists
 
 ```markdown
 ## What this PR does
 <one paragraph describing the completed feature>
 
 ## Changes
-<bullet list of every modified file with one line description each>
+<bullet list of changed files with one-line descriptions>
 
 ## How to test
-1. Build or run the application.
+1. Run the app or tests.
 2. Verify the new functionality.
-3. Include any required manual verification steps.
+3. Include any manual verification steps.
 ```
 
 Report:
@@ -181,14 +222,11 @@ Report:
 ✓ PR created — <PR URL>
 ```
 
-## Step 6 — Merge PR via GitHub MCP
+## Step 7 — Merge PR
 
-Use the GitHub MCP server to merge the Pull Request.
-
-Always use **Squash Merge**.
+Merge the PR using **Squash Merge**.
 
 If PR creation failed, stop.
-
 If merge conflicts exist, stop and ask the user to resolve them first.
 
 Report:
@@ -197,11 +235,11 @@ Report:
 ✓ PR merged to DEFAULT_BRANCH
 ```
 
-## Step 7 — Delete remote branch via GitHub MCP
+## Step 8 — Delete remote branch
 
-Delete `CURRENT_BRANCH` from GitHub.
+Delete `OLD_FEATURE_BRANCH` via GitHub MCP.
 
-If the branch has already been deleted, ignore the error.
+If it is already deleted, ignore the error.
 
 Report:
 
@@ -209,7 +247,7 @@ Report:
 ✓ Remote branch deleted
 ```
 
-## Step 8 — Switch to the default branch and pull
+## Step 9 — Switch to default branch and pull
 
 Run:
 
@@ -224,15 +262,15 @@ Report:
 ✓ Switched to DEFAULT_BRANCH — up to date
 ```
 
-## Step 9 — Delete local feature branch
+## Step 10 — Delete local branch
 
 Run:
 
 ```bash
-git branch -D CURRENT_BRANCH
+git branch -D OLD_FEATURE_BRANCH
 ```
 
-If the branch no longer exists locally, ignore the error.
+If it no longer exists locally, ignore the error.
 
 Report:
 
@@ -240,46 +278,136 @@ Report:
 ✓ Local branch deleted
 ```
 
-## Final summary
+## Step 11 — Find the next roadmap task
 
-Print:
+Using the roadmap order at the top of this file, find the task immediately after `CURRENT_TASK_ID`.
+
+Examples:
+
+* `1.1` → `1.2`
+* `1.2` → `1.3`
+* `2.8` → `3.1`
+* `4.5` → `4.6`
+
+Store:
+
+* `NEXT_TASK_ID`
+* `NEXT_TASK_TITLE`
+
+If there is no next task, do not create a branch. Report:
 
 ```text
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+✓ Roadmap complete — no next feature branch created
+```
+
+## Step 12 — Create next roadmap branch
+
+If a next task exists, generate:
+
+```text
+feature/<next-task-id-with-dashes>-<next-task-title-kebab-case>
+```
+
+Examples:
+
+* `1.3` + `Add S3 upload support` → `feature/1-3-add-s3-upload-support`
+* `2.6` + `EC2 Instance` → `feature/2-6-ec2-instance`
+
+Store it as `NEXT_BRANCH`.
+
+Run:
+
+```bash
+git checkout -b NEXT_BRANCH
+```
+
+If it already exists locally, stop and say:
+
+```text
+The next roadmap branch already exists locally: NEXT_BRANCH
+Switch to it manually or delete it before continuing.
+```
+
+Set `CURRENT_BRANCH = NEXT_BRANCH`.
+
+Report:
+
+```text
+✓ Created new feature branch — CURRENT_BRANCH
+✓ Next roadmap task — NEXT_TASK_ID: NEXT_TASK_TITLE
+```
+
+## Final summary
+
+If a next branch was created:
+
+```text
+────────────────────────────────────────
 
 /ship-feature complete
 
-✓ Committed — <message>
-✓ Pushed — <branch>
+✓ Committed — <COMMIT_MESSAGE>
+✓ Pushed — <OLD_FEATURE_BRANCH>
 ✓ PR created and merged
 ✓ Remote branch deleted
 ✓ Switched to DEFAULT_BRANCH
 ✓ Local branch deleted
+✓ Created new feature branch — <CURRENT_BRANCH>
+✓ Next roadmap task — <NEXT_TASK_ID>: <NEXT_TASK_TITLE>
 
-Next: run /create-spec for the next feature
+Next: implement <NEXT_TASK_ID> on <CURRENT_BRANCH>
 
-╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+────────────────────────────────────────
+```
+
+If there is no next task:
+
+```text
+────────────────────────────────────────
+
+/ship-feature complete
+
+✓ Committed — <COMMIT_MESSAGE>
+✓ Pushed — <OLD_FEATURE_BRANCH>
+✓ PR created and merged
+✓ Remote branch deleted
+✓ Switched to DEFAULT_BRANCH
+✓ Local branch deleted
+✓ Roadmap complete — no next feature branch created
+
+Next: deployment roadmap is complete
+
+────────────────────────────────────────
 ```
 
 ## Rules
 
-* Never commit directly to the repository's default branch.
-* Always detect the repository's default branch automatically.
-* Always use Squash Merge.
-* Always delete both the remote and local feature branch after merging.
-* If GitHub MCP is not connected, stop and say:
+* Never commit directly to the default branch.
+* Always use **Squash Merge**.
+* Always delete both the remote and local shipped branch.
+* Always create the **next roadmap branch** unless the roadmap is complete.
+* The next branch must come from the roadmap order in this file, not from git diff or a generic name.
+* The current branch must follow the roadmap branch naming format.
+* If GitHub MCP is not connected, stop with:
 
-  ```
-  GitHub MCP is not connected. Run /mcp to check connection.
-  ```
+```text
+GitHub MCP is not connected. Run /mcp to check connection.
+```
+
 * If push fails due to no upstream, use:
 
-  ```bash
-  git push -u origin CURRENT_BRANCH
-  ```
+```bash
+git push -u origin CURRENT_BRANCH
+```
+
 * Never proceed to merge if PR creation fails.
-* Never fail solely because a spec file is missing.
+* Never fail only because a spec file is missing.
 * If a spec is incomplete, use the code changes as the source of truth.
-* If automated tests do not exist, include manual verification steps in the PR.
-* If a Pull Request already exists for the current branch, reuse it instead of creating a new one.
-* Stop only for critical blockers such as merge conflicts, insufficient permissions, no changes to commit, or GitHub MCP being unavailable.
+* If a PR already exists for the current branch, reuse it.
+* Stop only for critical blockers such as:
+
+  * merge conflicts
+  * no changes to commit
+  * GitHub MCP unavailable
+  * invalid roadmap branch format
+  * unable to determine the next roadmap task
