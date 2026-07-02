@@ -45,14 +45,14 @@ The next branch is chosen from this ordered task list:
 Current branch **must** be:
 
 ```text
-feature/<task-id-with-dashes>-<task-title-slug>
+feature/<task-title-slug>
 ```
 
 Examples:
 
-* `feature/1-2-add-security-headers-middleware`
-* `feature/1-3-add-s3-upload-support`
-* `feature/2-6-ec2-instance`
+* `feature/add-s3-upload-support`
+* `feature/harden-cors-for-production`
+* `feature/multi-stage-docker-build`
 
 ## Step 1 — Detect branches
 
@@ -78,20 +78,23 @@ Switch to a roadmap feature branch before running /ship-feature.
 `CURRENT_BRANCH` must match:
 
 ```text
-feature/<task-id-with-dashes>-<task-title-slug>
+feature/<task-title-slug>
 ```
 
-Extract the task ID from the branch name:
+Extract the title slug from the branch name (everything after `feature/`).
+Find the matching roadmap task by slug-matching each roadmap title:
 
-* `feature/1-2-add-security-headers-middleware` → `CURRENT_TASK_ID=1.2`
-* `feature/2-6-ec2-instance` → `CURRENT_TASK_ID=2.6`
+1. Take a roadmap title (e.g. `Add S3 upload support`)
+2. Lowercase it → `add s3 upload support`
+3. Replace spaces with hyphens → `add-s3-upload-support`
+4. Compare to the extracted slug
 
-If the branch format is invalid, stop and say:
+If a match is found, set `CURRENT_TASK_ID` and `CURRENT_TASK_TITLE`.
+If no match is found, stop and say:
 
 ```text
-Current branch does not match the roadmap branch format.
-Rename it like: feature/1-2-add-security-headers-middleware
-Then run /ship-feature again.
+Current branch does not match any roadmap task.
+Ensure your branch name matches a roadmap task title.
 ```
 
 ## Step 3 — Generate commit message
@@ -305,13 +308,13 @@ If there is no next task, do not create a branch. Report:
 If a next task exists, generate:
 
 ```text
-feature/<next-task-id-with-dashes>-<next-task-title-kebab-case>
+feature/<next-task-title-kebab-case>
 ```
 
 Examples:
 
-* `1.3` + `Add S3 upload support` → `feature/1-3-add-s3-upload-support`
-* `2.6` + `EC2 Instance` → `feature/2-6-ec2-instance`
+* `1.3` + `Add S3 upload support` → `feature/add-s3-upload-support`
+* `2.6` + `EC2 Instance` → `feature/ec2-instance`
 
 Store it as `NEXT_BRANCH`.
 
