@@ -13,7 +13,11 @@ from starlette.types import Scope
 from config import settings
 from database.connection import get_db_cursor
 from exceptions import AuthError, ElectionError, NotFoundError, ValidationError, VoteError
-from middleware import AppErrorHandlerMiddleware, RequestLoggingMiddleware
+from middleware import (
+    AppErrorHandlerMiddleware,
+    RequestLoggingMiddleware,
+    SecurityHeadersMiddleware,
+)
 from services import auth_service
 from services.audit_service import get_action_types, get_audit_logs, get_target_types, log_action
 from services.auth_service import configure_jwt
@@ -127,6 +131,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(AuthMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ---------------------------------------------------------------------------
 # Startup
